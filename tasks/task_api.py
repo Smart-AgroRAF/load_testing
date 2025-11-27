@@ -7,7 +7,7 @@ import requests
 # Internal imports
 from config import TIMEOUT_API
 
-class Task:
+class TaskAPI:
     """Classe base para qualquer tipo de Task."""
 
     def __init__(self, host, user_id):
@@ -40,12 +40,11 @@ class Task:
 
             logging.info(
                 f"[User-{self.user_id:03d}]"
-                f"  [Req-{request_id:03d}]"
-                f"  {f'[{task_type}]':<12}"                
-                f"  {endpoint:<34}"
-                f"  {status_code}"
-                f"  {duration:.3f}s"
-                f"  {status}"
+                f" {f'[REQ-API-{request_id:03d}]':<15}"
+                f" {f'[{task_type}]':<15}"
+                f" {endpoint:<31}"
+                f" {duration:<1.3f}s"
+                f" {status}"
             )
 
             return {

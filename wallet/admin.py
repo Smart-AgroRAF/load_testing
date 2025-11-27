@@ -12,7 +12,7 @@ from web3 import Web3
 from web3.exceptions import TransactionNotFound
 
 # Internal imports
-from config import PRIVATE_KEY, RPC_URL, CONTRACT_ADDRESS, ABI_PATH
+from config import PRIVATE_KEY, CONTRACT_ADDRESS, ABI_PATH
 from wallet.config import w3
 
 # --- Locks e singletons ---
@@ -28,16 +28,17 @@ def get_admin_account():
     global _admin_account
     with _admin_init_lock:
         if _admin_account is None:
-            logging.info("[Admin] Initializing admin account...")
             _admin_account = Account.from_key(PRIVATE_KEY)
-            logging.info(f"[Admin] Admin address: {_admin_account.address}")
+            logging.info("[Admin] Initializing admin account")
+            logging.info(f"\taddress: {_admin_account.address}")
+            logging.info("")
         return _admin_account
 
 def _get_chain_id():
     return w3.eth.chain_id
 
 
-def _get_gas_price_wei(gwei: str = "5") -> int:
+def _get_gas_price_wei(gwei: int) -> int:
     try:
         return w3.to_wei(gwei, "gwei")
     except Exception:
@@ -58,20 +59,39 @@ def _reserve_nonce(address: str) -> int:
         _nonce_cache += 1
     return nonce
 
-def send_transaction(signed_tx, wait_receipt=True):
+def send_transaction(
+    signed_tx,
+    user_id,
+    admin_address,
+    target,
+    amount_eth,
+    attempt,
+    max_retries,
+    wait_receipt=True):
     """Send a signed transaction with detailed logging."""
     try:
         tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)        
-        logging.info(f"[Admin] Transaction sent: {tx_hash.hex()}")
-
+        
+        logging.info(f"[Admin] Transaction sent")
+        logging.info(f"\tHash    : {tx_hash.hex()}")
+        logging.info(f"\tUser    : {user_id:03d}")
+        # logging.info(f"\tFrom    : {admin_address}")
+        logging.info(f"\tTo      : {target}")
+        logging.info(f"\tAmount  : {amount_eth} ETH")
+        logging.info(f"\tAttempt : {attempt}/{max_retries}")
+    
         if wait_receipt:
-            receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+            receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=240)
             
-            status_str = "Success" if receipt.status == 1 else "Failed"
+            status = "success" if receipt.status == 1 else "failed"
 
-            logging.info(f"[Admin] Transaction received")
-            logging.info(f"\tHash: {tx_hash.hex()}")
-            logging.info(f"\tStatus: {status_str}")            
+            logging.info(f"[Admin] Transaction confirmed")
+            logging.info(f"\tHash    : {tx_hash.hex()}")
+            logging.info(f"\tUser    : {user_id:03d}")
+            # logging.info(f"\tfrom    : {admin_address}")
+            # logging.info(f"\tto      : {target}")
+            # logging.info(f"\tamount  : {amount_eth} ETH")
+            logging.info(f"\tStatus  : {status.capitalize()}")
 
             return tx_hash, receipt
 
@@ -82,11 +102,11 @@ def send_transaction(signed_tx, wait_receipt=True):
         return None, None
 
 
-#  ETH funding 
 def fund_wallet(
+    user_id,
     target: str,
     amount_eth: float = 1.0,
-    gas_price_gwei: str = "5",
+    gas_price_gwei: int = 5,
     wait_receipt: bool = True,
     max_retries: int = 2
 ) -> bool:
@@ -112,38 +132,39 @@ def fund_wallet(
                     "nonce": nonce,
                     "chainId": _get_chain_id(),
                 }
-
-                logging.info(f"[Admin] Starting ETH transfer")
-                logging.info(f"\tFrom: {admin.address}")
-                logging.info(f"\tTo: {target}")
-                logging.info(f"\tAmount: {amount_eth} ETH")
-                logging.info(f"\tNonce: {nonce}")
-                logging.info(f"\tGasPrice: {w3.from_wei(gas_price, 'gwei')} gwei")
-                logging.info(f"\tAttempt: {attempt}/{max_retries}")
-                
+              
 
                 signed_tx = w3.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
                 tx_hash, receipt = send_transaction(
-                    signed_tx,
+                    signed_tx=signed_tx,
+                    user_id=user_id,
+                    admin_address=admin.address,
+                    target=target,
+                    amount_eth=amount_eth,
+                    attempt=attempt,
+                    max_retries=max_retries,
                     wait_receipt=wait_receipt,  # Always wait for confirmation by default                    
                 )
 
             if receipt and receipt.status == 1:
-                logging.info(f"[Admin] ETH transfer confirmed")                
-                logging.info(f"\tFrom: {admin.address}")
-                logging.info(f"\tTo: {target}")
-                logging.info(f"\tHash: {tx_hash.hex()}")
-                logging.info(f"\tAmount: {amount_eth} ETH")
-                logging.info(f"\tBlock: {receipt.blockNumber}")
+                status = "success" if receipt.status == 1 else "failed"
+
+                # logging.info(f"[Admin] ETH transfer")
+                # logging.info(f"\tuser: {user_id:03d}")
+                # logging.info(f"\tfrom: {admin.address}")
+                # logging.info(f"\tto: {target}")
+                # logging.info(f"\tamount: {amount_eth}" )
+                # logging.info(f"\thash: {tx_hash.hex()}")
+                # logging.info(f"\tstatus: {status}")
                 
                 return True
 
         except Exception as e:
-            logging.info(f"[Admin] ETH transfer failed (attempt {attempt}/{max_retries}): {e}")
+            logging.info(f"[Admin] ETH transfer error attempt={attempt}/{max_retries}:'{e}'")
 
         time.sleep(0.5 * attempt)
 
-    logging.info(f"[Admin] All attempts to fund {target} failed.")
+    logging.info(f"[Admin] ETH transfer failed target: {target}")
     return False
 
 

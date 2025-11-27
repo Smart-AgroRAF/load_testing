@@ -19,7 +19,7 @@ class LoadTester:
 
     def __init__(
         self, 
-        output_file,
+        # output_file,
         host, 
         mode, 
         contract,
@@ -35,23 +35,25 @@ class LoadTester:
 
         self.user_cls = user_cls
     
-        self.output_file = output_file
+        # self.output_file = output_file
         self.host = host
         self.mode = mode
         self.contract = contract
         self.duration = duration
 
+
+        self.interval_requests = interval_requests
         self.users = self._create_users(amount_users=users)
         self.number_users = len(self.users)
         self.step_users = step_users
         self.interval_users = interval_users
-        self.interval_requests = interval_requests 
 
         if self.mode == "api-blockchain":
             self._authorized_users()
             self._fund_users()
 
-        self.results: List[Dict] = []    
+        self.results_tx_build: List[Dict] = []
+        self.results_read_only: List[Dict] = []
 
     def _fund_users(self):
         
@@ -61,39 +63,30 @@ class LoadTester:
         
         for user in self.users:
             try:
-                fund_wallet(user.wallet.address, amount_eth=AMOUNT_ETH)
-                balance = user.wallet.get_balance()
-                logging.info(f"[User-{user.user_id:03d}] Wallet funded successfully. Balance: {balance} ETH")
+                fund_wallet(
+                    user_id=user.user_id,
+                    target=user.wallet.address,
+                    amount_eth=AMOUNT_ETH,
+                    gas_price_gwei=5,
+                    wait_receipt=True,
+                    max_retries=3,
+                )
             except Exception as e:
                 logging.error(f"[User-{user.user_id:03d}] Failed to fund wallet {user.wallet.address}: {e}")
         
+
+        logging.info("Funded users")
+
+        for user in self.users:
+            balance = user.wallet.get_balance()
+            logging.info(f"\t[User-{user.user_id:03d}] Wallet {user.wallet.address} balance: {balance} ETH")
+
         logging.info("Finish fund users.")
-
-
-        # logging.info("-" * log.SIZE)
-        # logging.info("Starting fund users...")
-        # logging.info("")
-
-        # compile_contract()
-
-        # recipients = []
-        # for user in self.users:
-        #     recipients.append(user.wallet.address)
-
-    
-        # fund_wallets_batch(recipients=recipients, amount_eth=AMOUNT_ETH)
-
-        # logging.info("Recipients:")
-        # for u in self.users:
-        #     logging.info(f"  {u.user_id} -> {u.wallet.address}  balance={w3.eth.get_balance(u.wallet.address)}")
-
-        # logging.info("Finish fund users.")
-
 
     def _authorized_users(self):
 
         logging.info("-" * log.SIZE)
-        logging.info("Starting authorizing users for contract...")
+        logging.info(f"Starting authorizing {self.number_users} users for contract...")
         logging.info("")
 
         url = f"{self.host}/api/{self.contract}/admin/setAllowedAddressesBatch"
@@ -104,14 +97,12 @@ class LoadTester:
             "addresses": addresses,
             "allow": True
         }
-
-        # json_data = json.dumps(payload)
        
-        logging.info(f"  - URL            : {url}")
-        logging.info(f"  - Total users    : {len(addresses)}")
-        logging.info(f"  - Users:")
+        logging.info(f"\tURL           : {url}")
+        logging.info(f"\tUsers allowed : {len(addresses)}")
+        logging.info("")
         for user in self.users:
-            logging.info(f"      [User-{user.user_id:03d}] Wallet : {user.wallet.address}")
+            logging.info(f"\t[User-{user.user_id:03d}] wallet : {user.wallet.address}")
 
         logging.info("")
         logging.info("  Sending request to authorize batch addresses...")
@@ -125,19 +116,17 @@ class LoadTester:
                 timeout=TIMEOUT_BLOCKCHAIN
             )
 
-
             status_code = response.status_code
-            result_status = "Success" if 200 <= status_code < 300 else "Fail"
+            result_status = "success" if 200 <= status_code < 300 else "fail"
             
-            logging.info(f"  HTTP Status Code : {status_code}")
-            logging.info(f"  Status           : {result_status}")
+            logging.info(f"\tHTTP Status Code : {status_code}")
+            logging.info(f"\tStatus           : {result_status}")
 
             if status_code != 200:
-                logging.error(f"  Authorization failed with status code {status_code}")
+                logging.error(f"Authorization failed with status code {status_code}")
             else:
-                logging.info("  All users authorized successfully.")
+                logging.info("All users authorized successfully.")
 
-        # except subprocess.TimeoutExpired:
         except requests.exceptions.Timeout:
             logging.error("Authorization request timed out ({timeout}s).")
         except requests.exceptions.RequestException as e:
@@ -146,7 +135,6 @@ class LoadTester:
             logging.error(f"An unexpected error occurred: {e}")
 
 
-        
         logging.info("")
         logging.info("Finish authorizing users for contract.")
 
@@ -154,7 +142,7 @@ class LoadTester:
     def _create_users(self, amount_users: int):
         """Init all users before start the test."""
 
-        logging.info(f"Instantiating {amount_users} users...")
+        logging.info(f"Starting {amount_users} users...")
         logging.info("")
 
         users = []
@@ -164,6 +152,7 @@ class LoadTester:
                 host=self.host,
                 mode=self.mode,
                 user_id=user_id,
+                interval_requests=self.interval_requests
             ))
 
         logging.info("")
@@ -172,69 +161,65 @@ class LoadTester:
         return users
 
 
+    def _run(self, user, user_id, duration, run_function, results_operation):
+        """Runs a single type of flow (API or Blockchain) for 'duration' seconds."""
+        
+        logging.info(f"[User-{user_id:03d}] Starting run: {run_function.__name__}")
 
-    def simulate_user(self, user_id: int, duration: float, interval_requests: float):
+        start_time = time.perf_counter()
+        # request_count = 0
+
+        while (time.perf_counter() - start_time) < duration:
+            try:
+                results = run_function()
+
+                for result in results:
+                    results_operation.append(result)
+
+                # request_count += len(results)
+
+            except Exception as e:
+                logging.error(f"[User-{user_id:03d}] Error during {run_function.__name__}: {type(e).__name__}: {e}")
+                results_operation.append({
+                    "timestamp": int(time.time()),
+                    "user_id": user_id,
+                    "request": "error",
+                    "task": "error",
+                    "endpoint": "unknown",
+                    "duration": -1,
+                    "status": f"fail ({type(e).__name__})"
+                })
+
+
+        # logging.info(f"[User-{user_id:03d}] Finished {run_function.__name__}. Total tasks: {0}")
+        logging.info(f"[User-{user_id:03d}] Finished {run_function.__name__}.")
+
+
+    def simulate_user(self, phase, user_id: int, duration: float, interval_requests: float):
         """Runs the user's sequence of Tasks for 'duration' seconds."""
 
         user = self.users[user_id - 1]
 
-        logging.info(f"[User-{user_id:03d}] Starting Task execution...")
+        # 1. sequential API + Blockchain (API-TX_BUILD)
+        if phase == "api-tx-build":
+            self._run(user, user_id, duration, user.run_sequential_request, self.results_tx_build)
 
-        start_time = time.perf_counter()
-        request_count = 0
+        # 2. random API (API-READ-ONLY)
+        if phase == "api-read-only":
+            self._run(user, user_id, duration, user.run_random_request, self.results_read_only)
+            
 
-        while (time.perf_counter() - start_time) < duration:
-            try:
-        
-                # if self.mode == "api-only":
-                #     task_type = random.choices(
-                #         ["read_only", "tx_build"],
-                #         weights=[0.5, 0.5]
-                #     )[0]
-
-                #     if task_type == "read_only":
-                #         results = user.run_tasks_read_only(interval_requests)
-                #         logging.debug(f"[User-{user_id:03d}] Running READ_ONLY")
-                #     elif task_type == "tx_build":
-                #         results = user.run_tasks_tx_build(interval_requests)
-                #         logging.debug(f"[User-{user_id:03d}] Running TX_BUILD")
-
-                # elif self.mode == "api-blockchain":
-                #     results = user.run_tasks_tx_build_sequential()
-
-                results = user.run_random_request()
-
-                for result in results:
-                    self.results.append(result)
-                request_count += 1
-
-            except Exception as e:
-                logging.error(f"[User-{user_id:03d}] Error during Task execution: {type(e).__name__}: {e}")
-                self.results.append({
-                    "timestamp": int(time.time()),
-                    "user_id": user_id,
-                    "endpoint": "unknown",
-                    "status_code": "error",
-                    "duration": -1,
-                    "result": f"fail ({type(e).__name__})"
-                })
-
-            time.sleep(interval_requests)
-
-        logging.info(f"[User-{user_id:03d}] Finished. Total requests: {request_count}")
-
-    
-
-    def run_static_load(self):
+    def run_static_load(self, phase, output_file):
 
         """Runs a static load test."""
     
-        logging.info(f"Starting static load test with {self.number_users} users for {self.duration}s...\n")
+        logging.info(f"Starting static load test with {self.number_users} users for {self.duration}s...")
+        logging.info("")
 
         start_time = time.perf_counter()
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.number_users) as executor:
             futures = [
-                executor.submit(self.simulate_user, user_id=user_id, duration=self.duration, interval_requests=self.interval_requests)                
+                executor.submit(self.simulate_user, phase=phase, user_id=user_id, duration=self.duration, interval_requests=self.interval_requests)                
                 for user_id in range(1, self.number_users + 1)
             ]
 
@@ -246,22 +231,38 @@ class LoadTester:
 
         total_time = round(time.perf_counter() - start_time, 2)
 
-        self.save_results(self.output_file)
+        if phase == "api-tx-build":
+            results = self.results_tx_build
+        elif phase == "api-read-only":
+            results = self.results_read_only
+        else:
+            results = []
 
-        total_requests = len(self.results)
+        if output_file: 
+            self.save_results(results=results, output_file=output_file)
+
+        
+        total_tasks = len(results)
+
+        total_requests = len(results)
+        
+        # for result in results:
+        #     print(result["task"])
+
         rps = total_requests / total_time if total_time > 0 else 0
         
-        success = sum(1 for r in self.results if r["status"].startswith("success"))
-        fails = sum(1 for r in self.results if r["status"].startswith("fail"))
+        success = sum(1 for r in results if r["status"] == "success")
+        fails = sum(1 for r in results if r["status"] == "fail")
 
 
         log.print_end_summary(
             total_requests=total_requests,
+            total_tasks=total_tasks,
             success=success,
             fails=fails,
             total_time=total_time,
             rps=rps,
-            output_file=self.output_file,
+            output_file=output_file,
             mode=self.mode,
             contract=self.contract,
             run_type="static",
@@ -270,12 +271,14 @@ class LoadTester:
             interval_requests=self.interval_requests
         )
 
+        return total_time
 
-    def run_ramp_up_load(self):
+    def run_ramp_up_load(self, output_file):
 
         """Runs a ramp-up load test, adding users gradually."""
         
-        logging.info(f"Starting ramp-up load test with up to {self.number_users} users...\n")
+        logging.info(f"Starting ramp-up load test with up to {self.number_users} users...")
+        logging.info("")
     
         start_time = time.perf_counter()
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.number_users) as executor:
@@ -307,35 +310,45 @@ class LoadTester:
 
         total_time = round(time.perf_counter() - start_time, 2)
         
-        self.save_results(self.output_file)
 
-        total_requests = len(self.results)
-        rps = total_requests / total_time if total_time > 0 else 0
+        if phase == "api-tx-build":
+            results = self.results_tx_build
+        elif phase == "api-read-only":
+            results = self.results_read_only
+        else:
+            results = []
+
+        if output_file:
+            self.save_results(results=results, output_file=output_file)
+
+
+        return total_time
+        # total_requests = len(results)
+        # rps = total_requests / total_time if total_time > 0 else 0
         
+        # success = sum(1 for r in results if r["status"] == "success")
+        # fails = sum(1 for r in results if r["status"] == "fail")
 
-        success = sum(1 for r in self.results if r["status"].startswith("success"))
-        fails = sum(1 for r in self.results if r["status"].startswith("fail"))
+        # log.print_end_summary(
+        #     total_requests=total_requests,
+        #     total_tasks=total_tasks,
+        #     success=success,
+        #     fails=fails,
+        #     total_time=total_time,
+        #     rps=rps,
+        #     output_file=output_file,
+        #     mode=self.mode,
+        #     contract=self.contract,
+        #     run_type="ramp-up",
+        #     users=self.number_users,
+        #     duration=self.duration,
+        #     interval_requests=self.interval_requests,                  
+        #     step_users=self.step_users,
+        #     interval_users=self.interval_users,            
+        # )
 
 
-        log.print_end_summary(
-            total_requests=total_requests,
-            success=success,
-            fails=fails,
-            total_time=total_time,
-            rps=rps,
-            output_file=self.output_file,
-            mode=self.mode,
-            contract=self.contract,
-            run_type="ramp-up",
-            users=self.number_users,
-            duration=self.duration,
-            interval_requests=self.interval_requests,                  
-            step_users=self.step_users,
-            interval_users=self.interval_users,            
-        )
-
-
-    def save_results(self, output_file: str):
+    def save_results(self, results, output_file: str):
         fieldnames = [
             "timestamp",
             "user_id",
@@ -348,7 +361,7 @@ class LoadTester:
 
         filtered_rows = [
             {field: entry.get(field) for field in fieldnames}
-            for entry in self.results
+            for entry in results
         ]
 
         with open(output_file, "w", newline="") as csvfile:
