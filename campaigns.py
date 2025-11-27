@@ -8,26 +8,26 @@ payload_mint_root_batch = {
     "productType": "Tomate BRS Zamir",
     "batchId": "LOTE-01",
     "unitOfMeasure": "kg",
-    "batchQuantity": 100,
+    "batchQuantity": 1000000,
 }
 
 payload_split_batch = {
     "from": "<FROM>",
     "to": "<TO>",
-    "parentTokenId": 1,
+    "parentTokenId": "<TOKEN_ID>",
     "newUnitOfMeasure": "kg",
-    "newBatchQuantity": 50,
+    "newBatchQuantity": 1,
 }
 
 payload_set_product_is_active = {
     "from": "<FROM>",
-    "tokenId": 1,
-    "active": False,
+    "tokenId": "<TOKEN_ID>",
+    "active": True,
 }
 
 payload_add_status = {
     "from": "<FROM>",
-    "tokenId": 1,
+    "tokenId": "<TOKEN_ID>",
     "message": "Enviado para a cooperativa",
     "buyerName": "Comprador 1",
     "buyerIdentification": "Id Comprador 1",
@@ -53,16 +53,16 @@ payload_get_batch_histories = {
 
 erc721_tx_build = [
     ("/api/erc721/mintRootBatchTx", payload_mint_root_batch),
-    # ("/api/erc721/splitBatchTx", payload_split_batch),
-    # ("/api/erc721/setProductIsActiveTx", payload_set_product_is_active),
-    # ("/api/erc721/addStatusTx", payload_add_status),
+    ("/api/erc721/splitBatchTx", payload_split_batch),
+    ("/api/erc721/setProductIsActiveTx", payload_set_product_is_active),
+    ("/api/erc721/addStatusTx", payload_add_status),
 ]
 
 erc1155_tx_build = [
     ("/api/erc1155/mintRootBatchTx", payload_mint_root_batch),
-    # ("/api/erc1155/splitBatchTx", payload_split_batch),
-    # ("/api/erc1155/setProductIsActiveTx", payload_set_product_is_active),
-    # ("/api/erc1155/addStatusTx", payload_add_status),
+    ("/api/erc1155/splitBatchTx", payload_split_batch),
+    ("/api/erc1155/setProductIsActiveTx", payload_set_product_is_active),
+    ("/api/erc1155/addStatusTx", payload_add_status),
 ]
 
 erc721_read_only = [
@@ -80,11 +80,11 @@ erc1155_read_only = [
 ]
 
 CAMPAIGNS = {
-    ("ERC-721", "API-BUILD"): erc721_tx_build,
-    ("ERC-1155", "API-BUILD"): erc1155_tx_build,
+    ("ERC-721", "API-TX-BUILD"): erc721_tx_build,
+    ("ERC-1155", "API-TX-BUILD"): erc1155_tx_build,
 
-    ("ERC-721", "API-READ"): erc721_read_only,
-    ("ERC-1155", "API-READ"): erc1155_read_only,
+    ("ERC-721", "API-READ-ONLY"): erc721_read_only,
+    ("ERC-1155", "API-READ-ONLY"): erc1155_read_only,
 
     # Full = build + read
     # "erc721_full": erc721_tx_build + erc721_read_only,
@@ -126,3 +126,86 @@ def build_campaign(contract: str, task_type: str, address: str):
         final_campaign.append((endpoint, replaced))
 
     return final_campaign
+
+
+def build_campaign_sequential(
+    contract: str,
+    address: str,
+    n_split_batch_tx: int = None,
+    n_set_product_is_active_tx: int = None,
+    n_add_status_tx: int = None
+):
+    """
+    Builds a SEQUENTIAL campaign with the following fixed order:
+
+        mintRootBatchTx -> n splitBatchTx -> n setProductIsActiveTx -> n addStatusTx
+
+    This function returns the campaign in the exact same format expected by
+    User._build_user_campaigns(), meaning a list of (endpoint, payload) tuples.
+
+    Parameters
+    ----------
+    contract : str
+        Either "ERC-721" or "ERC-1155".
+    address : str
+        Address used to replace <FROM> and <TO> placeholders.
+    n_split_batch_tx : int
+        Number of repeated splitBatchTx calls.
+    n_set_product_is_active_tx : int
+        Number of repeated setProductIsActiveTx calls.
+    n_add_status_tx : int
+        Number of repeated addStatusTx calls.
+
+    Returns
+    -------
+    list[tuple[str, dict]]
+        A list of (endpoint, payload) tuples in sequential order.
+
+    Raises
+    ------
+    ValueError
+        If the contract type is invalid.
+    """
+
+    # Select correct template set
+    if contract == "ERC-721":
+        tx_templates = erc721_tx_build
+    elif contract == "ERC-1155":
+        tx_templates = erc1155_tx_build
+    else:
+        raise ValueError("Contract must be 'ERC-721' or 'ERC-1155'.")
+
+    mint_tpl = tx_templates[0]   # mintRootBatchTx
+    split_tpl = tx_templates[1]  # splitBatchTx
+    active_tpl = tx_templates[2] # setProductIsActiveTx
+    status_tpl = tx_templates[3] # addStatusTx
+
+    campaign = []
+
+    # 1. mintRootBatchTx (always once)
+    endpoint, payload = mint_tpl
+    replaced = _replace_placeholders(copy.deepcopy(payload), address)
+    campaign.append((endpoint, replaced))
+
+    # 2. splitBatchTx (n times)
+    if n_split_batch_tx:
+        for _ in range(n_split_batch_tx):
+            endpoint, payload = split_tpl
+            replaced = _replace_placeholders(copy.deepcopy(payload), address)
+            campaign.append((endpoint, replaced))
+
+    # 3. setProductIsActiveTx (n times)
+    if n_set_product_is_active_tx:
+        for _ in range(n_set_product_is_active_tx):
+            endpoint, payload = active_tpl
+            replaced = _replace_placeholders(copy.deepcopy(payload), address)
+            campaign.append((endpoint, replaced))
+
+    # 4. addStatusTx (n times)
+    if n_add_status_tx:
+        for _ in range(n_add_status_tx):
+            endpoint, payload = status_tpl
+            replaced = _replace_placeholders(copy.deepcopy(payload), address)
+            campaign.append((endpoint, replaced))
+
+    return campaign

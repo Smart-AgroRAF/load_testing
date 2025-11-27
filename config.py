@@ -23,7 +23,7 @@ SPAWN_RATE = 2
 # Account.enable_unaudited_hdwallet_features()
 
 # Blockchain
-RPC_URL = os.getenv("RPC_URL")
+BESU_RPC_URL = os.getenv("BESU_RPC_URL", "http://127.0.0.1:8545")
 CHAINID = os.getenv("BESU_CHAINID")
 PRIVATE_KEY = os.getenv("PRIVATE_KEY")
 

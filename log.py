@@ -146,6 +146,7 @@ def print_args_run(mode, run_type, contract, users, step_users, interval_users, 
 
 def print_end_summary(
     total_requests,
+    total_tasks,
     success,
     fails,
     total_time,
@@ -184,7 +185,8 @@ def print_end_summary(
     )
 
     logging.info("-" * SIZE)
-    logging.info(f"  - Total Requests   : {total_requests}")
+    logging.info(f"  - Total tasks      : {total_tasks}")
+    logging.info(f"  - Total requests   : {total_requests}")
     logging.info(f"  - Successes        : {success}")
     logging.info(f"  - Failures         : {fails}")
     logging.info(f"  - Requests/seconds : {rps}")
