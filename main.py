@@ -178,6 +178,10 @@ def warm_up_load_tester(
     logging.info(f"[WARM-UP][{run.upper()}] Finished load test.")
     logging.info("")
 
+def pad_list(lst, target_len):
+    if len(lst) == 1:
+        return lst * target_len
+    return lst
 
 def main():
     parser = argparse.ArgumentParser(description="Load testing")
@@ -220,17 +224,34 @@ def main():
     if args.type == "cartesian":
         combos = list(itertools.product(args.users, args.step_users, args.interval_users, args.duration))
     elif args.type == "paired":
-        combos = list(zip(args.users, args.step_users, args.interval_users, args.duration))
+        # combos = list(zip(args.users, args.step_users, args.interval_users, args.duration))
+        max_len = max(len(args.users), len(args.step_users), len(args.interval_users), len(args.duration))
 
+        users           = pad_list(args.users, max_len)
+        step_users      = pad_list(args.step_users, max_len)
+        interval_users  = pad_list(args.interval_users, max_len)
+        duration        = pad_list(args.duration, max_len)
+
+        combos = list(zip(users, step_users, interval_users, duration))
+
+    
     contracts_to_run = ["erc721", "erc1155"] if args.contract == "both" else [args.contract]
 
     types_to_run = ["static", "ramp-up"] if args.run == "both" else [args.run]
 
-    total_runs_all = len(combos) * len(types_to_run) * len(contracts_to_run)
+
+    run_types = []
+    if args.run in ("static", "both"):
+        run_types.append("static")
+    if args.run in ("ramp-up", "both"):
+        run_types.append("ramp-up")
+
+    total_runs_all = len(combos) * len(run_types) * len(contracts_to_run)
+
 
     log.print_global_run_plan_summary(
         mode=args.mode, 
-        run_types=types_to_run, 
+        run_types=run_types, 
         contracts_to_run=contracts_to_run, 
         combos=combos, 
         interval_requests=args.interval_requests,
@@ -272,7 +293,7 @@ def main():
     current_run = 0
     for contract in contracts_to_run:
         for idx, (users, step_users, interval_users, duration) in enumerate(combos, start=1):
-            for run_type in types_to_run:
+            for run_type in run_types:
                 current_run += 1
                 logging.info(f"Run {current_run}/{total_runs_all}")
 
