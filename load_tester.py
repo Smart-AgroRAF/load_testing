@@ -242,34 +242,34 @@ class LoadTester:
             self.save_results(results=results, output_file=output_file)
 
         
-        total_tasks = len(results)
+        # total_tasks = len(results)
 
-        total_requests = len(results)
+        # total_requests = len(results)
         
         # for result in results:
         #     print(result["task"])
 
-        rps = total_requests / total_time if total_time > 0 else 0
+        # rps = total_requests / total_time if total_time > 0 else 0
         
-        success = sum(1 for r in results if r["status"] == "success")
-        fails = sum(1 for r in results if r["status"] == "fail")
+        # success = sum(1 for r in results if r["status"] == "success")
+        # fails = sum(1 for r in results if r["status"] == "fail")
 
 
-        log.print_end_summary(
-            total_requests=total_requests,
-            total_tasks=total_tasks,
-            success=success,
-            fails=fails,
-            total_time=total_time,
-            rps=rps,
-            output_file=output_file,
-            mode=self.mode,
-            contract=self.contract,
-            run_type="static",
-            users=self.number_users,
-            duration=self.duration,
-            interval_requests=self.interval_requests
-        )
+        # log.print_end_summary(
+        #     total_requests=total_requests,
+        #     total_tasks=total_tasks,
+        #     success=success,
+        #     fails=fails,
+        #     total_time=total_time,
+        #     rps=rps,
+        #     output_file=output_file,
+        #     mode=self.mode,
+        #     contract=self.contract,
+        #     run_type="static",
+        #     users=self.number_users,
+        #     duration=self.duration,
+        #     interval_requests=self.interval_requests
+        # )
 
         return total_time
 
