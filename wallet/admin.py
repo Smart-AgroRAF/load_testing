@@ -4,12 +4,8 @@ import logging
 import threading
 from typing import Optional
 
-from pathlib import Path
-from solcx import compile_standard, install_solc
-
 from eth_account import Account
 from web3 import Web3
-from web3.exceptions import TransactionNotFound
 
 # Internal imports
 from config import PRIVATE_KEY, CONTRACT_ADDRESS, ABI_PATH
@@ -19,11 +15,11 @@ from wallet.config import w3
 _admin_account: Optional[Account] = None
 _admin_init_lock = threading.Lock()
 _admin_tx_lock = threading.Lock()
-_nonce_cache_lock = threading.Lock()
-_nonce_cache: Optional[int] = None
 
 
-#  Admin account initialization
+# ---------------------------
+# Admin account initialization
+# ---------------------------
 def get_admin_account():
     global _admin_account
     with _admin_init_lock:
@@ -33,6 +29,7 @@ def get_admin_account():
             logging.info(f"\taddress: {_admin_account.address}")
             logging.info("")
         return _admin_account
+
 
 def _get_chain_id():
     return w3.eth.chain_id
@@ -45,20 +42,14 @@ def _get_gas_price_wei(gwei: int) -> int:
         return w3.eth.gas_price
 
 
-def _get_next_nonce_from_rpc(address: str) -> int:
+def _get_nonce_rpc(address: str) -> int:
+    """Sempre pegar nonce REAL do RPC (pending)."""
     return w3.eth.get_transaction_count(address, "pending")
 
 
-def _reserve_nonce(address: str) -> int:
-    """Reserve a local nonce to avoid race conditions between threads."""
-    global _nonce_cache
-    with _nonce_cache_lock:
-        if _nonce_cache is None:
-            _nonce_cache = _get_next_nonce_from_rpc(address)
-        nonce = _nonce_cache
-        _nonce_cache += 1
-    return nonce
-
+# -------------------------------------
+# Send transaction (unchanged)
+# -------------------------------------
 def send_transaction(
     signed_tx,
     user_id,
@@ -67,30 +58,25 @@ def send_transaction(
     amount_eth,
     attempt,
     max_retries,
-    wait_receipt=True):
-    """Send a signed transaction with detailed logging."""
+    wait_receipt=True
+):
     try:
-        tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)        
-        
+        tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+
         logging.info(f"[Admin] Transaction sent")
         logging.info(f"\tHash    : {tx_hash.hex()}")
         logging.info(f"\tUser    : {user_id:03d}")
-        # logging.info(f"\tFrom    : {admin_address}")
         logging.info(f"\tTo      : {target}")
         logging.info(f"\tAmount  : {amount_eth} ETH")
         logging.info(f"\tAttempt : {attempt}/{max_retries}")
-    
+
         if wait_receipt:
             receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=240)
-            
             status = "success" if receipt.status == 1 else "failed"
 
             logging.info(f"[Admin] Transaction confirmed")
             logging.info(f"\tHash    : {tx_hash.hex()}")
             logging.info(f"\tUser    : {user_id:03d}")
-            # logging.info(f"\tfrom    : {admin_address}")
-            # logging.info(f"\tto      : {target}")
-            # logging.info(f"\tamount  : {amount_eth} ETH")
             logging.info(f"\tStatus  : {status.capitalize()}")
 
             return tx_hash, receipt
@@ -102,6 +88,9 @@ def send_transaction(
         return None, None
 
 
+# -------------------------------------
+# FUND WALLET - FIXED VERSION
+# -------------------------------------
 def fund_wallet(
     user_id,
     target: str,
@@ -110,31 +99,49 @@ def fund_wallet(
     wait_receipt: bool = True,
     max_retries: int = 2
 ) -> bool:
-    """Send ETH from admin to `target`, thread-safe, with detailed logs."""
+
     admin = get_admin_account()
-    if not Web3.is_address(target):    
+
+    if not Web3.is_address(target):
         logging.info(f"[Admin] Invalid target address: {target}")
         return False
 
     for attempt in range(1, max_retries + 1):
+
         try:
             with _admin_tx_lock:
-                nonce = _reserve_nonce(admin.address)
+
+                # ---------- NEW: nonce real ----------
+                nonce = _get_nonce_rpc(admin.address)
+
                 gas_price = _get_gas_price_wei(gas_price_gwei)
+                gas_limit = 21000
                 value_wei = w3.to_wei(amount_eth, "ether")
+
+                # ---------- NEW: check balance BEFORE ----------
+                balance = w3.eth.get_balance(admin.address)
+                total_cost = value_wei + gas_limit * gas_price
+
+                if balance < total_cost:
+                    logging.error(
+                        f"[Admin] Saldo insuficiente: balance={w3.from_wei(balance,'ether')} "
+                        f"< required={w3.from_wei(total_cost,'ether')} ETH "
+                        f"(user={user_id}, target={target})"
+                    )
+                    return False
 
                 tx = {
                     "from": admin.address,
                     "to": Web3.to_checksum_address(target),
                     "value": value_wei,
-                    "gas": 21000,
+                    "gas": gas_limit,
                     "gasPrice": gas_price,
                     "nonce": nonce,
                     "chainId": _get_chain_id(),
                 }
-              
 
-                signed_tx = w3.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
+                signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
+
                 tx_hash, receipt = send_transaction(
                     signed_tx=signed_tx,
                     user_id=user_id,
@@ -143,24 +150,15 @@ def fund_wallet(
                     amount_eth=amount_eth,
                     attempt=attempt,
                     max_retries=max_retries,
-                    wait_receipt=wait_receipt,  # Always wait for confirmation by default                    
+                    wait_receipt=wait_receipt
                 )
 
+            # success?
             if receipt and receipt.status == 1:
-                status = "success" if receipt.status == 1 else "failed"
-
-                # logging.info(f"[Admin] ETH transfer")
-                # logging.info(f"\tuser: {user_id:03d}")
-                # logging.info(f"\tfrom: {admin.address}")
-                # logging.info(f"\tto: {target}")
-                # logging.info(f"\tamount: {amount_eth}" )
-                # logging.info(f"\thash: {tx_hash.hex()}")
-                # logging.info(f"\tstatus: {status}")
-                
                 return True
 
         except Exception as e:
-            logging.info(f"[Admin] ETH transfer error attempt={attempt}/{max_retries}:'{e}'")
+            logging.info(f"[Admin] ETH transfer error: {e}")
 
         time.sleep(0.5 * attempt)
 
@@ -168,12 +166,14 @@ def fund_wallet(
     return False
 
 
+# -------------------------------------
+# Contract loading
+# -------------------------------------
 def get_contract(contract_address: str, abi):
-    """Obtém instância de contrato."""
     return w3.eth.contract(address=contract_address, abi=abi)
 
+
 def load_contract():
-    """Carrega o contrato e o ABI."""
     try:
         with open(CONTRACT_ADDRESS) as f:
             address_data = json.load(f)
@@ -183,230 +183,45 @@ def load_contract():
             artifact = json.load(f)
             abi = artifact["abi"]
 
-        contract = get_contract(contract_address=contract_address, abi=abi)
-        return contract
-
+        return get_contract(contract_address, abi)
     except Exception as e:
         raise RuntimeError(f"Erro ao carregar contrato: {e}")
 
+
+# -------------------------------------
+# Authorize wallet (also fixed)
+# -------------------------------------
 def authorize_wallet(contract, wallet_address):
-    """Autoriza uma carteira no contrato."""
-
     try:
-        gas_price_gwei = "5"
-
+        gas_price = _get_gas_price_wei(5)
         admin_account = get_admin_account()
-        nonce = _reserve_nonce(admin_account.address)
-        gas_price = _get_gas_price_wei(gas_price_gwei)
-        value_wei = w3.to_wei(0.0, "ether")
 
+        with _admin_tx_lock:
+            nonce = _get_nonce_rpc(admin_account.address)
 
-        tx = contract.functions.setAllowedAddress(wallet_address, True).build_transaction({
-            "from": admin_account.address,
-            "value": value_wei,
-            "gas": 300000,
-            "gasPrice": gas_price,
-            "nonce": nonce,
-            "chainId": _get_chain_id()
-        })
+            tx = contract.functions.setAllowedAddress(wallet_address, True).build_transaction({
+                "from": admin_account.address,
+                "value": 0,
+                "gas": 300000,
+                "gasPrice": gas_price,
+                "nonce": nonce,
+                "chainId": _get_chain_id()
+            })
 
-        # signed = sign_transaction(admin_account, tx)
-        signed_tx = w3.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
+            signed_tx = w3.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
 
-        tx_hash, receipt = send_transaction(signed_tx)
+            tx_hash, receipt = send_transaction(
+                signed_tx,
+                user_id=0,
+                admin_address=admin_account.address,
+                target=wallet_address,
+                amount_eth=0,
+                attempt=1,
+                max_retries=1,
+                wait_receipt=True
+            )
+
         print(f"{wallet_address} autorizada ({tx_hash.hex()})")
+
     except Exception as e:
         print(f"Erro ao autorizar {wallet_address}: {e}")
-
-
-# --- Utilitários ---
-# def reset_nonce_cache():
-#     global _nonce_cache
-#     with _nonce_cache_lock:
-#         _nonce_cache = None
-#         logging.info("[Admin] Nonce cache reset.")
-
-
-
-
-ABI_PATH = Path("./wallet/BatchTransferETH.abi.json")
-BIN_PATH = Path("./wallet/BatchTransferETH.bin")
-ADDR_PATH = Path("./wallet/deployed_batch_contract.json")
-
-def load_contract_info():
-    """Retorna ABI, BIN e endereço salvo (se existir)."""
-    with open(ABI_PATH) as f:
-        abi = json.load(f)
-
-    with open(BIN_PATH) as f:
-        bytecode = f.read().strip()
-
-    address = None
-    if ADDR_PATH.exists():
-        with open(ADDR_PATH) as f:
-            address = json.load(f).get("address")
-
-    return abi, bytecode, address
-
-
-def save_contract_address(address: str):
-    with open(ADDR_PATH, "w") as f:
-        json.dump({"address": address}, f, indent=4)
-    print(f"[INFO] Contrato salvo em {ADDR_PATH}: {address}")
-
-
-def get_or_deploy_contract(deployer_account):
-    abi, bytecode, existing_address = load_contract_info()
-
-    # SE O CONTRATO EXISTE: retorna
-    if existing_address:
-        print(f"[INFO] Contrato já implantado em {existing_address}, carregando.")
-        return w3.eth.contract(address=existing_address, abi=abi)
-
-    print("[INFO] Implantando contrato BatchTransferETH...")
-
-    contract = w3.eth.contract(abi=abi, bytecode=bytecode)
-
-    # --- BUILD TRANSACTION ---
-    nonce = w3.eth.get_transaction_count(deployer_account.address, "pending")
-
-    tx = contract.constructor().build_transaction({
-        "from": deployer_account.address,
-        "gas": 5_000_000,
-        "gasPrice": w3.eth.gas_price,
-        "nonce": nonce,
-        "chainId": w3.eth.chain_id
-    })
-
-    # --- SIGN ---
-    signed_tx = w3.eth.account.sign_transaction(tx, private_key=deployer_account.key)
-
-    # --- SEND RAW ---
-    tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-
-    print(f"[INFO] Deploy enviado: {tx_hash.hex()}")
-
-    # --- WAIT RECEIPT ---
-    receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-
-    contract_address = receipt.contractAddress
-    # print("Contract balance:", w3.eth.get_balance(contract_address))
-
-    contract_balance = w3.eth.get_balance(contract_address)
-    logging.info(f"[DEBUG] Contract balance AFTER tx: {contract_balance}")
-    save_contract_address(contract_address)
-
-    print(f"[SUCCESS] Contrato implantado em: {contract_address}")
-
-    return w3.eth.contract(address=contract_address, abi=abi)
-
-
-
-# def fund_wallets_batch(recipients: list, value):
-#     """Envia ETH para várias carteiras usando o contrato BatchTransferETH."""
-
-    
-#     admin = get_admin_account()
-
-#     # deployer = w3.eth.account.from_key(deployer_priv_key)
-#     # w3.eth.default_account = deployer.address
-
-#     # 1️⃣ Garante que o contrato existe antes (deploy ou load)
-#     contract = get_or_deploy_contract(admin)
-
-#     # 2️⃣ Calcula total enviado
-#     # total_value = sum(amounts)
-
-#     amount = w3.to_wei(value, "ether")
-
-#     # 3️⃣ Chama o batchSendETH
-#     tx = contract.functions.batchSendETH(recipients, amount).build_transaction({
-#         "from": admin.address,
-#         "value": amount * len(recipients),
-#         "nonce": w3.eth.get_transaction_count(admin.address),
-#         "gas": 500000,
-#         "gasPrice": w3.eth.gas_price
-#     })
-
-#     signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
-#     tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-
-#     receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-#     print(f"[SUCCESS] Batch enviado. Hash: {receipt.transactionHash.hex()}")
-
-#     return receipt
-
-
-def fund_wallets_batch(recipients: list, amount_eth: float):
-    """
-    Envia o mesmo valor ETH para todos os endereços usando o contrato.
-    """
-    admin = get_admin_account()
-    contract = get_or_deploy_contract(admin)
-
-    # logging.info("Admin balance:", w3.eth.get_balance(admin.address))
-
-
-    amount = w3.to_wei(amount_eth, "ether")
-
-    # CRIA ARRAY DE AMOUNT PARA CADA RECEBEDOR
-    amounts = [amount] * len(recipients)
-
-    nonce = _reserve_nonce(admin.address)
-
-    tx = contract.functions.batchSendETH(
-        recipients,
-        amounts            # <-- AGORA SIM: uint256[]
-    ).build_transaction({
-        "from": admin.address,
-        "value": amount * len(recipients),
-        "gas": 500000,
-        "gasPrice": w3.eth.gas_price,
-        "nonce": nonce,
-        "chainId": w3.eth.chain_id
-    })
-
-    signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
-    tx_hash, receipt = send_transaction(signed)
-
-    if receipt and receipt.status == 1:
-        logging.info(f"[SUCCESS] Batch funding sent! {tx_hash.hex()}")
-
-    return receipt
-
-
-
-
-def compile_contract():
-    CONTRACT_PATH = Path("./wallet/BatchTransferETH.sol")
-
-    with open(CONTRACT_PATH, "r") as f:
-        source = f.read()
-
-    install_solc("0.8.20")
-
-    compiled = compile_standard(
-        {
-            "language": "Solidity",
-            "sources": {"BatchTransferETH.sol": {"content": source}},
-            "settings": {
-                "outputSelection": {
-                    "*": {"*": ["abi", "evm.bytecode.object"]}
-                }
-            },
-        },
-        solc_version="0.8.20",
-    )
-
-    abi = compiled["contracts"]["BatchTransferETH.sol"]["BatchTransferETH"]["abi"]
-    bytecode = compiled["contracts"]["BatchTransferETH.sol"]["BatchTransferETH"]["evm"]["bytecode"]["object"]
-
-    # ⬇️ SALVA DO JEITO CORRETO
-    ABI_PATH.write_text(json.dumps(abi, indent=4))
-    BIN_PATH.write_text(bytecode)
-
-    print(f"[INFO] ABI salva em {ABI_PATH}")
-    print(f"[INFO] Bytecode salvo em {BIN_PATH}")
-
-    return abi, bytecode
-
