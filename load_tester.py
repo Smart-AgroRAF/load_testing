@@ -9,7 +9,7 @@ from typing import List, Dict, Type
 
 # Internal imports
 import log
-from wallet.admin import fund_wallet, compile_contract, fund_wallets_batch
+from wallet.admin import fund_wallet
 from users.user import User
 from config import TIMEOUT_BLOCKCHAIN, AMOUNT_ETH
 from wallet.config import w3
