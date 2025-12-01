@@ -9,7 +9,7 @@ import campaigns
 from wallet.wallet import Wallet
 from tasks.task_api import TaskAPI
 from tasks.task_blockchain import TaskBlockchain
-
+from config import TIMEOUT_API
 
 class User:
     """Simulates a user performing API or blockchain operations."""
@@ -261,7 +261,7 @@ class User:
                 url=url,
                 json={"userAddress": [self.wallet.address]},
                 headers={"Content-Type": "application/json"},
-                timeout=120
+                timeout=TIMEOUT_API
             )
             
             body = response.json()

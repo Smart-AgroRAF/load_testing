@@ -9,7 +9,9 @@ load_dotenv()
 # Locust test
 RESULTS_DIR = "results"
 MODES = ["api-only", "api-blockchain"]
-HOST = "http://localhost:3000"
+# HOST = "http://localhost:3000"
+# HOST = "http://31.97.30.104:4000"
+HOST = os.getenv("API_URL", "http://localhost:3000")
 RUN_TIME = 10
 USERS = 12
 SPAWN_RATE = 2
@@ -39,4 +41,4 @@ ARGS_FILENAME = "args.json"
 TIMEOUT_BLOCKCHAIN = 240
 TIMEOUT_API = 30
 
-AMOUNT_ETH = 50
+AMOUNT_ETH = 5
