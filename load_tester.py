@@ -209,7 +209,7 @@ class LoadTester:
             self._run(user, user_id, duration, user.run_random_request, self.results_read_only)
             
 
-    def run_static_load(self, phase, output_file):
+    def run_static_load(self, phase, output_file=None):
 
         """Runs a static load test."""
     
@@ -273,7 +273,7 @@ class LoadTester:
 
         return total_time
 
-    def run_ramp_up_load(self, output_file):
+    def run_ramp_up_load(self, phase, output_file=None):
 
         """Runs a ramp-up load test, adding users gradually."""
         
@@ -291,7 +291,7 @@ class LoadTester:
                 for i in range(new_users):
                     user_id = active_users + i + 1
                     futures.append(
-                        executor.submit(self.simulate_user, user_id, self.duration, self.interval_requests)
+                        executor.submit(self.simulate_user, phase=phase, user_id=user_id, duration=self.duration, interval_requests=self.interval_requests)
                     )
 
                 active_users += new_users

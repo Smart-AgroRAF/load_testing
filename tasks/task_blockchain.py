@@ -69,7 +69,9 @@ class TaskBlockchain:
                 # f" [REQ-BLOCK-{request_id:03d}]"
                 f" {f'[REQ-BLOCK-{request_id:03d}]':<15}"
                 f" {f'[TX-BUILD]':<15}"
-                f"Empty transaction."
+                f" {endpoint:<31}"
+                f" {duration:<1.3f}s"
+                f" Empty transaction."
             )
             raise Exception("Failed to build transaction")
 
@@ -117,7 +119,9 @@ class TaskBlockchain:
                 # f" [REQ-BLOCK-{request_id:03d}]"
                 f" {f'[REQ-BLOCK-{request_id:03d}]':<15}"
                 f" {f'[TX-SIGN]':<15}"
-                "Failed to sign transaction."
+                f" {endpoint:<31}"
+                f" {duration:<1.3f}s"
+                f" Failed to sign transaction."
                 )
             raise Exception("Failed to sign transaction")
 
@@ -167,6 +171,8 @@ class TaskBlockchain:
                 # f" [REQ-BLOCK-{request_id:03d}]"
                 f" {f'[REQ-BLOCK-{request_id:03d}]':<15}"
                 f" {f'[TX-SEND]':<15}"
+                f" {endpoint:<31}"
+                f" {duration:<1.3f}s"
                 f" No receipt returned."
             )
             raise Exception("Failed to get receipt")

@@ -152,7 +152,7 @@ def warm_up_load_tester(
     logging.info("")
 
     tester = LoadTester(
-        output_file=None,
+        # output_file=None,
         host=host,
         mode=mode,
         contract=contract,
@@ -171,9 +171,11 @@ def warm_up_load_tester(
     logging.info("")
 
     if run == "static":
-        tester.run_static_load()
+        tester.run_static_load(phase="api-tx-build")
+        tester.run_static_load(phase="api-read-only")
     elif run == "ramp-up":
-        tester.run_ramp_up_load()
+        tester.run_ramp_up_load(phase="api-tx-build")
+        tester.run_ramp_up_load(phase="api-read-only")
 
     logging.info(f"[WARM-UP][{run.upper()}] Finished load test.")
     logging.info("")
@@ -208,8 +210,8 @@ def main():
     parser.add_argument("--interval-requests", type=float, default=1.0, help="Pausa entre requisições consecutivas (em segundos)")
 
     # Warm-up
-    parser.add_argument("--warmup-users", type=int, default=2, help="Usuários no warm-up (default=2)")
-    parser.add_argument("--warmup-duration", type=int, default=0, help="Duração do warm-up (default=15s)")
+    parser.add_argument("--warmup-users", type=int, default=1, help="Usuários no warm-up (default=1)")
+    parser.add_argument("--warmup-duration", type=float, default=0, help="Duração do warm-up (default=15s)")
     parser.add_argument("--warmup-step-users", type=int, default=1, help="Duração do warm-up (default=15s)")
     parser.add_argument("--warmup-interval-users", type=float, default=1.0, help="Spawn rate no warm-up (default=1.0)")
     parser.add_argument("--warmup-interval-requests", type=float, default=1.0, help="Spawn rate no warm-up (default=1.0)")
