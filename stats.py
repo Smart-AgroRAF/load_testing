@@ -1,3 +1,5 @@
+import csv
+import os
 import pandas as pd
 
 class Stats:
@@ -9,24 +11,6 @@ class Stats:
     def __init__(self, percentiles=None):
         self.df = pd.DataFrame()
         self.percentiles = sorted([p for p in (percentiles or []) if 0 < p < 1])
-
-    # def load_multiple_csv(self, *paths):
-    #     """
-    #     Load multiple CSVs and merge them into a single dataframe.
-    #     Example:
-    #         stats.load_multiple_csv("tx_build.csv", "read_only.csv")
-    #     """
-    #     frames = []
-
-    #     for path in paths:
-    #         df = pd.read_csv(path)
-
-    #         df["duration"] = pd.to_numeric(df["duration"], errors="coerce")
-    #         df.dropna(subset=["duration"], inplace=True)
-
-    #         frames.append(df)
-
-    #     self.df = pd.concat(frames, ignore_index=True)
 
     def load_multiple_csv(self, files):
         frames = []
@@ -121,15 +105,4 @@ class Stats:
                 "total_time": total_time,
             }])
 
-    # ---- Save ----
-    def save_stats_by_task(self, path):
-        self.stats_by_task().to_csv(path, index=False)
 
-    def save_stats_by_endpoint(self, path):
-        self.stats_by_endpoint().to_csv(path, index=False)
-
-    def save_stats_by_task_and_endpoint(self, path):
-        self.stats_by_task_and_endpoint().to_csv(path, index=False)
-
-    def save_global_stats(self, path, total_time, phase):
-        self.global_stats(total_time, phase).to_csv(path, index=False)

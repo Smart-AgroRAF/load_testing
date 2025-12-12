@@ -1,4 +1,5 @@
 import csv
+import os
 import json
 import time
 import random
@@ -13,6 +14,7 @@ from wallet.admin import fund_wallet
 from users.user import User
 from config import TIMEOUT_BLOCKCHAIN, AMOUNT_ETH
 from wallet.config import w3
+from stats import Stats
 
 class LoadTester:
     """Performs HTTP load tests simulating multiple users."""
@@ -166,8 +168,10 @@ class LoadTester:
         
         logging.info(f"[User-{user_id:03d}] Starting run: {run_function.__name__}")
 
+        # Capture initial state
+        start_api_count = user.api_requests_counter
+        start_bc_count = user.blockchain_requests_counter
         start_time = time.perf_counter()
-        # request_count = 0
 
         while (time.perf_counter() - start_time) < duration:
             try:
@@ -175,8 +179,6 @@ class LoadTester:
 
                 for result in results:
                     results_operation.append(result)
-
-                # request_count += len(results)
 
             except Exception as e:
                 logging.error(f"[User-{user_id:03d}] Error during {run_function.__name__}: {type(e).__name__}: {e}")
@@ -190,23 +192,50 @@ class LoadTester:
                     "status": f"fail ({type(e).__name__})"
                 })
 
+        # Capture final state and calculate stats
+        end_time = time.perf_counter()
+        end_api_count = user.api_requests_counter
+        end_bc_count = user.blockchain_requests_counter
 
-        # logging.info(f"[User-{user_id:03d}] Finished {run_function.__name__}. Total tasks: {0}")
-        logging.info(f"[User-{user_id:03d}] Finished {run_function.__name__}.")
+        delta_api = end_api_count - start_api_count
+        delta_bc = end_bc_count - start_bc_count
+        total_requests = delta_api + delta_bc
+        elapsed_time = end_time - start_time
+        
+        rps = total_requests / elapsed_time if elapsed_time > 0 else 0.0
+
+        logging.info(
+            f"[User-{user_id:03d}] Finished {run_function.__name__}. "
+            f"Duration: {elapsed_time:.2f}s | "
+            f"API Reqs: {delta_api} | "
+            f"BC Reqs: {delta_bc} | "
+            f"Total: {total_requests} | "
+            f"RPS: {rps:.2f}"
+        )
+
+        return {
+            "api": delta_api,
+            "bc": delta_bc,
+            "total": total_requests
+        }
 
 
     def simulate_user(self, phase, user_id: int, duration: float, interval_requests: float):
         """Runs the user's sequence of Tasks for 'duration' seconds."""
 
         user = self.users[user_id - 1]
+        
+        counts = {"api": 0, "bc": 0, "total": 0}
 
         # 1. sequential API + Blockchain (API-TX_BUILD)
         if phase == "api-tx-build":
-            self._run(user, user_id, duration, user.run_sequential_request, self.results_tx_build)
+            counts = self._run(user, user_id, duration, user.run_sequential_request, self.results_tx_build)
 
         # 2. random API (API-READ-ONLY)
         if phase == "api-read-only":
-            self._run(user, user_id, duration, user.run_random_request, self.results_read_only)
+            counts = self._run(user, user_id, duration, user.run_random_request, self.results_read_only)
+            
+        return counts
             
 
     def run_static_load(self, phase, output_file=None):
@@ -223,13 +252,26 @@ class LoadTester:
                 for user_id in range(1, self.number_users + 1)
             ]
 
+            global_api = 0
+            global_bc = 0
+            global_total = 0
+
             for future in concurrent.futures.as_completed(futures):
                 try:
-                    future.result()
+                    res = future.result()
+                    if res:
+                        global_api += res["api"]
+                        global_bc += res["bc"]
+                        global_total += res["total"]
                 except Exception as e:
                     logging.error(f"[THREAD ERROR] -> {type(e).__name__}: {e}")
 
         total_time = round(time.perf_counter() - start_time, 2)
+        
+        global_rps = global_total / total_time if total_time > 0 else 0.0
+        
+        log.print_global_summary("STATIC", self.number_users, total_time, global_api, global_bc, global_total, global_rps)
+
 
         if phase == "api-tx-build":
             results = self.results_tx_build
@@ -238,40 +280,18 @@ class LoadTester:
         else:
             results = []
 
-        if output_file: 
-            self.save_results(results=results, output_file=output_file)
-
-        
-        # total_tasks = len(results)
-
-        # total_requests = len(results)
-        
-        # for result in results:
-        #     print(result["task"])
-
-        # rps = total_requests / total_time if total_time > 0 else 0
-        
-        # success = sum(1 for r in results if r["status"] == "success")
-        # fails = sum(1 for r in results if r["status"] == "fail")
-
-
-        # log.print_end_summary(
-        #     total_requests=total_requests,
-        #     total_tasks=total_tasks,
-        #     success=success,
-        #     fails=fails,
-        #     total_time=total_time,
-        #     rps=rps,
-        #     output_file=output_file,
-        #     mode=self.mode,
-        #     contract=self.contract,
-        #     run_type="static",
-        #     users=self.number_users,
-        #     duration=self.duration,
-        #     interval_requests=self.interval_requests
-        # )
-
-        return total_time
+        return {
+            "users": self.number_users,
+            "results": results,
+            "output_file": output_file,
+            "total_time": total_time,
+            "global_stats": {
+                "api": global_api,
+                "bc": global_bc,
+                "total": global_total,
+                "rps": global_rps
+            }
+        }
 
     def run_ramp_up_load(self, phase, output_file=None):
 
@@ -302,14 +322,27 @@ class LoadTester:
                     time.sleep(self.interval_users)
 
             # Wait for all threads to finish
+            global_api = 0
+            global_bc = 0
+            global_total = 0
+            
             for future in concurrent.futures.as_completed(futures):
                 try:
-                    future.result()
+                    res = future.result()
+                    if res:
+                        global_api += res["api"]
+                        global_bc += res["bc"]
+                        global_total += res["total"]
                 except Exception as e:                
                     logging.error(f"[THREAD ERROR] -> {type(e).__name__}: {e}")
 
         total_time = round(time.perf_counter() - start_time, 2)
+
+        global_rps = global_total / total_time if total_time > 0 else 0.0
+
+        log.print_global_summary("RAMP-UP", self.number_users, total_time, global_api, global_bc, global_total, global_rps)
         
+
 
         if phase == "api-tx-build":
             results = self.results_tx_build
@@ -318,53 +351,17 @@ class LoadTester:
         else:
             results = []
 
-        if output_file:
-            self.save_results(results=results, output_file=output_file)
+        return {
+            "users": self.number_users,
+            "results": results,
+            "output_file": output_file,
+            "total_time": total_time,
+            "global_stats": {
+                "api": global_api,
+                "bc": global_bc,
+                "total": global_total,
+                "rps": global_rps
+            }
+        }
 
 
-        return total_time
-        # total_requests = len(results)
-        # rps = total_requests / total_time if total_time > 0 else 0
-        
-        # success = sum(1 for r in results if r["status"] == "success")
-        # fails = sum(1 for r in results if r["status"] == "fail")
-
-        # log.print_end_summary(
-        #     total_requests=total_requests,
-        #     total_tasks=total_tasks,
-        #     success=success,
-        #     fails=fails,
-        #     total_time=total_time,
-        #     rps=rps,
-        #     output_file=output_file,
-        #     mode=self.mode,
-        #     contract=self.contract,
-        #     run_type="ramp-up",
-        #     users=self.number_users,
-        #     duration=self.duration,
-        #     interval_requests=self.interval_requests,                  
-        #     step_users=self.step_users,
-        #     interval_users=self.interval_users,            
-        # )
-
-
-    def save_results(self, results, output_file: str):
-        fieldnames = [
-            "timestamp",
-            "user_id",
-            "request",
-            "task",
-            "endpoint",
-            "duration",
-            "status",
-        ]
-
-        filtered_rows = [
-            {field: entry.get(field) for field in fieldnames}
-            for entry in results
-        ]
-
-        with open(output_file, "w", newline="") as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(filtered_rows)
