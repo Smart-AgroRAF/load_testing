@@ -178,7 +178,7 @@ def main():
     # Configuration arguments
     parser.add_argument("--mode", type=str, default=MODES[0], choices=MODES, help=f"Modo de execução (default: {MODES[0]})")
     parser.add_argument("--type", choices=["cartesian", "paired"], default="paired", help="Define o modo de combinação dos parâmetros.")
-    parser.add_argument("--contract", choices=["erc721", "erc1155", "both"], default="both", help="Standards the contract")
+    parser.add_argument("--contract", choices=["erc721", "erc1155", "both"], default="both", help="Padrão de contrato (default: both)")
     parser.add_argument("--run", choices=["static", "ramp-up", "both"], default="both", help="Tipo de execução (default: both)")
     parser.add_argument("--host", default=HOST, help=f"Host alvo (default: {HOST})")
     # parser.add_argument("--tx-build-weight", default=TX_BUILD_WEIGHT, help=f"Peso das rotas (default: {TX_BUILD_WEIGHT})")
@@ -194,9 +194,9 @@ def main():
     # Warm-up
     parser.add_argument("--warmup-users", type=int, default=1, help="Usuários no warm-up (default=1)")
     parser.add_argument("--warmup-duration", type=float, default=0, help="Duração do warm-up (default=15s)")
-    parser.add_argument("--warmup-step-users", type=int, default=1, help="Duração do warm-up (default=15s)")
-    parser.add_argument("--warmup-interval-users", type=float, default=1.0, help="Spawn rate no warm-up (default=1.0)")
-    parser.add_argument("--warmup-interval-requests", type=float, default=1.0, help="Spawn rate no warm-up (default=1.0)")
+    parser.add_argument("--warmup-step-users", type=int, default=1, help="Incremento de usuários no warm-up (default=1)")
+    parser.add_argument("--warmup-interval-users", type=float, default=1.0, help="Tempo entre incrementos no warm-up (default=1.0s)")
+    parser.add_argument("--warmup-interval-requests", type=float, default=1.0, help="Pausa entre requisições no warm-up (default=1.0s)")
 
     args = parser.parse_args()
 
