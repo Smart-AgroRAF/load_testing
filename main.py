@@ -11,6 +11,7 @@ from datetime import datetime
 import log
 import save
 from stats import Stats
+import plot as plot_module
 from load_tester import LoadTester
 from users.user_erc721 import UserERC721
 from users.user_erc1155 import UserERC1155
@@ -306,6 +307,12 @@ def main():
                     step_users=step_users if run_type == "ramp-up" else None,
                     interval_users=interval_users if run_type == "ramp-up" else None,
                 )
+
+    # Generate analysis plots
+    try:
+        plot_module.generate_plots(results_directory)
+    except Exception as e:
+        logging.error(f"Error generating plots: {e}")
 
 
 if __name__ == "__main__":
