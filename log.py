@@ -198,6 +198,18 @@ def print_end_summary(
         logging.info(f"  - Ramp-up load test completed in {total_time}s")
 
     logging.info("=" * SIZE)
+    
+
+def print_global_summary(phase_label, workers, duration, global_api, global_bc, global_total, global_rps):
+    logging.info("=" * 60)
+    logging.info(f"GLOBAL SUMMARY ({phase_label.upper()}):")
+    logging.info(f"  - Workers        : {workers}")
+    logging.info(f"  - Duration       : {duration:.2f}s")
+    logging.info(f"  - Total API      : {global_api}")
+    logging.info(f"  - Total BC       : {global_bc}")
+    logging.info(f"  - Total Requests : {global_total}")
+    logging.info(f"  - Global RPS     : {global_rps:.2f}")
+    logging.info("=" * 60)
 
     
 # ==========================================================

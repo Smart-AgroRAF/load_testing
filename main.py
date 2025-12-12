@@ -25,37 +25,9 @@ def execute_and_generate_stats(run, phase_name, run_directory):
     
     output_file = f"{phase_dir}/out.csv"
     
-    # start_time = time.perf_counter()
+    run_data = run(phase_name, output_file)
     
-    total_time = run(phase_name, output_file)
-    
-    # total_time = time.perf_counter() - start_time
-
-    df = pd.read_csv(output_file)
-    
-    percentiles = [.5, .6, .7, .8, .9, .99]
-    stats = Stats(percentiles=percentiles)
-
-    stats.load_multiple_csv([
-        (f"{phase_dir}/out.csv", {phase_name}),
-        # (f"{phase_dir}/out.csv", "read_only"),
-    ])
-
-    path_stats_task = f"{phase_dir}/stats_task.csv"
-    stats.save_stats_by_task(path_stats_task)
-    logging.info(f"Stats by task saved: {path_stats_task}")
-
-    path_stats_endpoint = f"{phase_dir}/stats_endpoint.csv"
-    stats.save_stats_by_endpoint(path_stats_endpoint)
-    logging.info(f"Stats by endpoint saved: {path_stats_endpoint}")
-
-    path_stats_task_endpoint = f"{phase_dir}/stats_task_endpoint.csv"
-    stats.save_stats_by_task_and_endpoint(path_stats_task_endpoint)
-    logging.info(f"Stats by task and endpoint saved: {path_stats_task_endpoint}")
-
-    path_stats_global = f"{phase_dir}/stats_global.csv"
-    stats.save_global_stats(path_stats_global, total_time, phase_name)
-    logging.info(f"Stats global saved: {path_stats_global}")
+    save.save_all_outputs(run_data, phase_name, output_file)
 
     logging.info(f"Finished stats generation.\n")
 
@@ -85,6 +57,16 @@ def run_load_tester(
 
     run_directory = save.create_directory(output_dir, run_directory_name)
     output_file = f"{run_directory}/out.csv"
+
+    save.save_run_args(
+        run_directory=run_directory,
+        users=users,
+        spawn_rate=interval_users if run == "ramp-up" else 0, # Assuming interval_users as spawn_rate for simplicity
+        run_time=duration,
+        host=host,
+        contract=contract,
+        mode=mode
+    )
 
     if contract == "erc721":
         user_class = UserERC721  

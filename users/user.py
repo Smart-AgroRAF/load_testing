@@ -3,6 +3,7 @@ import time
 import random
 import logging
 import requests
+from functools import partial
 
 # Internal imports
 import campaigns 
@@ -31,6 +32,9 @@ class User:
 
         self.wallet = Wallet(self.user_id)
         self.campaign_names = campaign_names
+
+        self.sequence_step = 0
+        self.last_token_id = None
 
         # READ-ONLY campaigns
         self.available_campaigns_read_only = self._build_user_campaigns_read_only()
@@ -61,20 +65,111 @@ class User:
  
 
     def _build_user_campaigns_sequential_tx_build(self):
-        """Builds TX-BUILD sequential campaigns."""
+        """Constrói a sequência de métodos para as campanhas TX-BUILD."""
         campaigns_dict = {}
+        # Usaremos esta lista para armazenar a sequência de funções
+        self.tx_build_sequence = []
 
         for task_type in self.campaign_names:
             if task_type == "API-TX-BUILD":
-                campaigns_dict[(self.contract, task_type)] = campaigns.build_campaign_sequential(
+                # A função build_campaign_sequential retorna a lista de requisições
+                campaign_requests = campaigns.build_campaign_sequential(
                     contract=self.contract,
                     address=self.wallet.address,
                     n_split_batch_tx=random.choice(range(1, 5)),
-                    # n_set_product_is_active_tx=random.choice(range(1, 5)),
                     n_add_status_tx=random.choice(range(1, 5))
                 )
 
-        return campaigns_dict
+                # Passo 1: Mint (adiciona a função _step_mint à sequência)
+                # IMPORTANTE: Precisamos capturar endpoint e payload para evitar problemas com o loop abaixo
+                # Por isso, usamos a mesma técnica de factory/closure ou default args
+                mint_endpoint, mint_payload = campaign_requests[0]
+                
+                self.tx_build_sequence.append(partial(self._step_mint, mint_endpoint, mint_payload))
+
+                # Passo 2: Get Token (adiciona a função _step_get_token)
+                self.tx_build_sequence.append(self._step_get_token)
+
+                # Passos seguintes: Transações que dependem do token_id
+                for endpoint, payload in campaign_requests[1:]:
+                    # Usamos uma função auxiliar para capturar as variáveis ep e pl corretamente
+                    self.tx_build_sequence.append(partial(self._step_tx, endpoint, payload))
+        
+        # O retorno original não é mais necessário, pois a sequência está em self.tx_build_sequence
+        return campaigns_dict # Pode retornar um dict vazio ou ser removido
+
+
+    def _step_mint(self, endpoint, payload):
+           """Passo 1: Executa o mintRootBatchTx."""
+           measured_results, _, status = self._measure_api_block(
+               endpoint=endpoint,
+               payload=payload,
+               task_type="API-TX-BUILD"
+           )
+           if status == "reverted":
+               # Se a transação for revertida, reiniciamos a sequência para este usuário
+               self.sequence_step = 0
+           return measured_results
+   
+    def _step_get_token(self):
+        """Passo 2: Executa o getUsersBatches e armazena o token ID."""
+        try:
+            contract = self.contract.lower().replace("-", "")
+            endpoint = f"/api/{contract}/getUsersBatches"
+            url = self.host + endpoint
+            
+            response = requests.post(
+                url=url,
+                json={"userAddress": [self.wallet.address]},
+                headers={"Content-Type": "application/json"},
+                timeout=TIMEOUT_API
+            )
+            
+            body = response.json()
+
+            if (
+                not body or "results" not in body or len(body["results"]) == 0 or
+                "tokenIds" not in body["results"][0] or len(body["results"][0]["tokenIds"]) == 0
+            ):
+                raise ValueError("No tokenIds found for this user.")
+
+            token_id = body["results"][0]["tokenIds"][-1]
+            self.last_token_id = token_id # Armazena o token no estado do usuário
+
+            logging.debug(
+                f"{f'[User-{self.user_id:03d}]'}"
+                f" {f'[GET-TOKEN]':<15}"
+                f" {endpoint:31}"
+                f" TokenId: {token_id}"
+            )
+            return [] # Este passo não gera resultados medidos
+        except Exception as e:
+            logging.error(f"[User-{self.user_id:03d}] Erro em _step_get_token: {e}", exc_info=True)
+            self.sequence_step = 0 # Reinicia em caso de erro
+            # Retorna um erro formatado como os outros resultados
+            return [{"timestamp": int(time.time()), "user_id": self.user_id, "endpoint": "get_token_error", "status_code": "error", "duration": -1, "status": f"fail ({type(e).__name__})"}]
+ 
+    def _step_tx(self, endpoint, payload):
+        """Passos seguintes: Executa uma transação genérica que precisa de um token ID."""
+        if self.last_token_id is None:
+            # Se não temos um token, não podemos continuar. Reiniciamos a sequência.
+            logging.warning(f"[User-{self.user_id:03d}] Pulando passo de TX pois o token ID não foi definido.")
+            self.sequence_step = 0
+            return []
+
+        updated_payload = self._replace_token_id(payload, self.last_token_id)
+
+        measured_results, _, status = self._measure_api_block(
+            endpoint=endpoint,
+            payload=updated_payload,
+            task_type="API-TX-BUILD"
+        )
+
+        if status == "reverted":
+            self.sequence_step = 0 # Reinicia em caso de erro
+
+        return measured_results
+
 
     def _api_request(self, endpoint, payload, task_type):
         """Executes one API request and increments request counter."""
@@ -187,7 +282,7 @@ class User:
         if self.interval_requests:
             time.sleep(self.interval_requests)
 
-        logging.info(
+        logging.debug(
             f"[User-{self.user_id:03d}]"
             # f" [Req-{self.requests_counter:03d}]"
             # f" [REQ-FULL-{self.blockchain_requests_counter:03d}]"
@@ -216,94 +311,34 @@ class User:
 
         return results_combined, tx_body, status
 
-
-
     def run_sequential_request(self):
         """
-        Sequential TX workflow (must preserve strict order):
-        mintRootBatchTx -> getUsersBatches -> splitBatchTx -> setProductIsActiveTx -> addStatusTx
+        Executa UM passo do fluxo sequencial de TX:
+        mintRootBatchTx -> getUsersBatches -> splitBatchTx -> etc.
         """
-        results = []
-
         try:
-            # Load sequential campaign
-            key = None
-            campaign_requests = None
+            if not self.tx_build_sequence:
+                # Se a sequência não foi criada, não há nada a fazer
+                raise RuntimeError("Nenhuma sequência de TX-BUILD disponível para este usuário.")
 
-            for k in self.available_campaigns_tx_build.keys():
-                key = k
-                campaign_requests = self.available_campaigns_tx_build[k]
-                break
+            # Pega a função correspondente ao passo atual
+            step_function = self.tx_build_sequence[self.sequence_step]
 
-            if not campaign_requests:
-                raise RuntimeError("No TX-BUILD campaigns available.")
+            # Executa o passo
+            results = step_function()
 
-            
-            # STEP 1. mintRootBatchTx (MEASURED)
-            mint_endpoint, mint_payload = campaign_requests[0]
-
-            measured_results, mint_body, status = self._measure_api_block(
-                endpoint=mint_endpoint,
-                payload=mint_payload,
-                task_type="API-TX-BUILD"
-            )
-            results.extend(measured_results)
-
-            if status == "reverted":
-                return results
-
-            
-            # STEP 2.  getUsersBatches (NOT MEASURED)
-            contract = self.contract.lower().replace("-", "")
-            endpoint = f"/api/{contract}/getUsersBatches"
-            url = self.host + endpoint
-            response = requests.post(
-                url=url,
-                json={"userAddress": [self.wallet.address]},
-                headers={"Content-Type": "application/json"},
-                timeout=TIMEOUT_API
-            )
-            
-            body = response.json()
-
-            if (
-                not body or "results" not in body or len(body["results"]) == 0 or
-                "tokenIds" not in body["results"][0] or len(body["results"][0]["tokenIds"]) == 0
-            ):
-                raise ValueError("No tokenIds found for this user.")
-
-            token_id = body["results"][0]["tokenIds"][-1]
-
-            logging.info(
-                f"{f'[User-{self.user_id:03d}]'}"
-                f" {f'[GET-TOKEN]':<15}"
-                f" {endpoint:31}"
-                f" TokenId: {token_id}"
-            )
-
-            
-            # STEP 3, 4, 5. n * splitBatchTx -> n * setProductIsActiveTx -> n * addStatusTx (MEASURED)
-            for endpoint, payload in campaign_requests[1:]:
-                updated_payload = self._replace_token_id(payload, token_id)
-
-                measured_results, tx_body, status = self._measure_api_block(
-                    endpoint=endpoint,
-                    payload=updated_payload,
-                    task_type="API-TX-BUILD"
-                )
-
-                results.extend(measured_results)
-
-                if status == "reverted":
-                    break
+            # Avança para o próximo passo. O operador '%' faz com que volte a 0 no final.
+            self.sequence_step = (self.sequence_step + 1) % len(self.tx_build_sequence)
 
             return results
 
         except Exception as e:
             logging.error(
-                f"[User-{self.user_id:03d}] Error in run_sequential_request: {e}",
+                f"[User-{self.user_id:03d}] Erro em run_sequential_request (passo {self.sequence_step}): {e}",
                 exc_info=True
             )
+            # Em caso de falha, reinicia a sequência para evitar travamentos
+            self.sequence_step = 0
             return [{
                 "timestamp": int(time.time()),
                 "user_id": self.user_id,
@@ -312,3 +347,6 @@ class User:
                 "duration": -1,
                 "status": f"fail ({type(e).__name__})"
             }]
+
+
+
