@@ -27,6 +27,11 @@ class User:
         self.api_requests_counter = 0 
         self.blockchain_requests_counter = 0 
 
+        self.api_success = 0
+        self.api_fail = 0
+        self.bc_success = 0
+        self.bc_fail = 0
+
         self.api_errors = 0
         self.blockchain_errors = 0
 
@@ -184,6 +189,11 @@ class User:
             # request_id=self.requests_counter
         )
 
+        if result and ((isinstance(result, dict) and result.get("status") == "success") or (isinstance(result, tuple) and result[0].get("status") == "success")):
+             self.api_success += 1
+        else:
+             self.api_fail += 1
+
         if self.interval_requests:
             time.sleep(self.interval_requests)
         
@@ -199,12 +209,20 @@ class User:
         self.blockchain_requests_counter += 1
         # self.requests_counter += 1
 
-        return self.task_blockchain.execute(
+        result = self.task_blockchain.execute(
             tx_obj=tx_obj,
             endpoint=endpoint,
             request_id=self.blockchain_requests_counter
             # request_id=self.requests_counter
         )
+
+        status = result[2]
+        if status == "success":
+            self.bc_success += 1
+        else:
+            self.bc_fail += 1
+            
+        return result
 
 
     # RANDOM MODE (READ-ONLY)

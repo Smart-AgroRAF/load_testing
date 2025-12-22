@@ -190,7 +190,7 @@ Log bruto de todas as operações (API e Blockchain) de cada usuário.
 Colunas: `timestamp`, `user_id`, `task`, `endpoint`, `duration`, `status`, `error`
 
 #### `stats_global.csv`
-Resumo executivo contendo RPS global, total de requisições e contagem de workers.
+Resumo executivo contendo RPS global, total de requisições e contagem de users.
 
 #### `stats_task.csv`
 Estatísticas agrupadas por tipo de tarefa (ex: `TX-SEND`, `API-GET`).

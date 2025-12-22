@@ -63,21 +63,37 @@ def send_transaction(
     try:
         tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
 
-        logging.info(f"[Admin] Transaction sent")
-        logging.info(f"\tHash    : {tx_hash.hex()}")
-        logging.info(f"\tUser    : {user_id:03d}")
-        logging.info(f"\tTo      : {target}")
-        logging.info(f"\tAmount  : {amount_eth} ETH")
-        logging.info(f"\tAttempt : {attempt}/{max_retries}")
+        # logging.info(f"[Admin] Transaction sent")
+        # logging.info(f"\tHash    : {tx_hash.hex()}")
+        # logging.info(f"\tUser    : {user_id:03d}")
+        # logging.info(f"\tTo      : {target}")
+        # logging.info(f"\tAmount  : {amount_eth} ETH")
+        # logging.info(f"\tAttempt : {attempt}/{max_retries}")
+        logging.info(
+            f"[Admin] {'Transaction sent':<21} "
+            f"User-{user_id:03d} "
+            f"Wallet: {target[:8]}... "
+            f"{str(amount_eth)} ETH "
+            f"Hash: {tx_hash.hex()[:8]}... "
+            f"{attempt}/{max_retries}"
+        )
 
         if wait_receipt:
             receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=240)
             status = "success" if receipt.status == 1 else "failed"
 
-            logging.info(f"[Admin] Transaction confirmed")
-            logging.info(f"\tHash    : {tx_hash.hex()}")
-            logging.info(f"\tUser    : {user_id:03d}")
-            logging.info(f"\tStatus  : {status.capitalize()}")
+            # logging.info(f"[Admin] Transaction confirmed")
+            # logging.info(f"\tHash    : {tx_hash.hex()}")
+            # logging.info(f"\tUser    : {user_id:03d}")
+            # logging.info(f"\tStatus  : {status.capitalize()}")
+            logging.info(
+                f"[Admin] {'Transaction confirmed':<21} "
+                f"User-{user_id:03d} " 
+                f"Wallet: {target[:8]}... "
+                f"{str(amount_eth)} ETH "
+                f"Hash: {tx_hash.hex()[:8]}... "
+                f"{status.capitalize()}"
+            )
 
             return tx_hash, receipt
 

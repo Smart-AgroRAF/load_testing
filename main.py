@@ -11,13 +11,11 @@ from datetime import datetime
 import log
 import save
 from stats import Stats
-import plot as plot_module
 from load_tester import LoadTester
 from users.user_erc721 import UserERC721
 from users.user_erc1155 import UserERC1155
-
 from config import USERS, RESULTS_DIR, MODES, HOST, RUN_TIME, SPAWN_RATE
-
+from plot.plot import generate_plots
 
 def execute_and_generate_stats(run, phase_name, run_directory):
 
@@ -174,7 +172,7 @@ def main():
     help_msg = "verbosity logging level (INFO=%d DEBUG=%d)" % (logging.INFO, logging.DEBUG)
     parser.add_argument("--verbosity", "-v", help=help_msg, default=logging.INFO, type=int)
 
-    parser.add_argument("--plot", type=str, help="Gera gráficos a partir dos arquivos CSV de resultados existentes.")
+    parser.add_argument("--plot", type=str, help="Gera gráficos a partir dos arquivos CSV de resultados existentes (caminho do diretório).")
 
     # Configuration arguments
     parser.add_argument("--mode", type=str, default=MODES[0], choices=MODES, help=f"Modo de execução (default: {MODES[0]})")
@@ -200,6 +198,21 @@ def main():
     parser.add_argument("--warmup-interval-requests", type=float, default=1.0, help="Pausa entre requisições no warm-up (default=1.0s)")
 
     args = parser.parse_args()
+
+    # If --plot is provided, only generate plots and exit
+    if args.plot:
+        if not os.path.exists(args.plot):
+            logging.info(f"Error: Directory '{args.plot}' not found.")
+            return
+        
+        
+        try:
+            generate_plots(args.plot)
+        except Exception as e:
+            logging.info(f"Error generated plots: {e}")
+            import traceback
+            traceback.print_exc()
+        return
 
     timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
     results_directory = save.create_results_directory(timestamp=timestamp)
@@ -310,7 +323,7 @@ def main():
 
     # Generate analysis plots
     try:
-        plot_module.generate_plots(results_directory)
+        generate_plots(results_directory)
     except Exception as e:
         logging.error(f"Error generating plots: {e}")
 
