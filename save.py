@@ -6,6 +6,7 @@ from datetime import datetime
 from stats import Stats
 
 # Internal imports
+from log import SIZE
 from config import RESULTS_DIR, ARGS_RUN_FILENAME, ARGS_FILENAME, RESUME_RUN_FILENAME
 
 def _create_directory(directory_path: str):
@@ -106,10 +107,16 @@ def save_results(results, output_file: str):
         writer.writerows(filtered_rows)
 
 
-def save_global_performance_summary(path, users, duration, api_reqs, bc_reqs, total_reqs, rps, phase):
+def save_global_performance_summary(
+    path, users, duration, api_reqs, bc_reqs, total_reqs, rps, phase,
+    api_success=0, api_fail=0, bc_success=0, bc_fail=0
+):
     """Saves the global execution summary to a CSV file."""
     file_exists = os.path.isfile(path)
-    fieldnames = ["phase", "users", "duration", "total_api", "total_bc", "total_requests", "rps"]
+    fieldnames = [
+        "phase", "users", "duration", "total_api", "total_bc", "total_requests", "rps",
+        "api_success", "api_fail", "bc_success", "bc_fail"
+    ]
     
     try:
         with open(path, "a", newline="") as csvfile:
@@ -124,13 +131,14 @@ def save_global_performance_summary(path, users, duration, api_reqs, bc_reqs, to
                 "total_api": api_reqs,
                 "total_bc": bc_reqs,
                 "total_requests": total_reqs,
-                "rps": f"{rps:.2f}"
+                "rps": f"{rps:.2f}",
+                "api_success": api_success,
+                "api_fail": api_fail,
+                "bc_success": bc_success,
+                "bc_fail": bc_fail
             })
     except Exception as e:
         print(f"[Save] Failed to save global summary: {e}")
-
-
-
 
 
 def save_all_outputs(run_data, phase_name, output_file):
@@ -140,6 +148,9 @@ def save_all_outputs(run_data, phase_name, output_file):
     if not output_file:
         return
 
+    logging.info(f"Saving outputs for phase: {phase_name}")
+    logging.info("")
+    
     # Unpack run_data
     results = run_data.get("results", [])
     users = run_data.get("users", 0) # run_data uses "users" key for worker count
@@ -149,6 +160,7 @@ def save_all_outputs(run_data, phase_name, output_file):
 
     # 1. Save Raw Results (out.csv)
     save_results(results, output_file)
+    logging.info(f"\tRaw results saved: {output_file}")
     
     # 2. Save Global Summary (stats_global.csv)
     # display_path = os.path.join(os.path.dirname(output_file), "stats_global.csv")
@@ -161,8 +173,13 @@ def save_all_outputs(run_data, phase_name, output_file):
         global_stats.get("bc", 0), 
         global_stats.get("total", 0), 
         global_stats.get("rps", 0),
-        phase=phase_name
+        phase=phase_name,
+        api_success=global_stats.get("api_success", 0),
+        api_fail=global_stats.get("api_fail", 0),
+        bc_success=global_stats.get("bc_success", 0),
+        bc_fail=global_stats.get("bc_fail", 0)
     )
+    logging.info(f"\tGlobal stats saved: {summary_path}")
 
     # 3. Generate and Save Detailed Statistics
     # Re-use the logic from main.py to generate stats by task/endpoint
@@ -177,14 +194,13 @@ def save_all_outputs(run_data, phase_name, output_file):
 
     path_stats_task = os.path.join(phase_dir, "stats_task.csv")
     stats.stats_by_task().to_csv(path_stats_task, index=False)
-    logging.info(f"Stats by task saved: {path_stats_task}")
+    logging.info(f"\tStats by task saved: {path_stats_task}")
 
     path_stats_endpoint = os.path.join(phase_dir, "stats_endpoint.csv")
     stats.stats_by_endpoint().to_csv(path_stats_endpoint, index=False)
-    logging.info(f"Stats by endpoint saved: {path_stats_endpoint}")
+    logging.info(f"\tStats by endpoint saved: {path_stats_endpoint}")
 
     path_stats_task_endpoint = os.path.join(phase_dir, "stats_task_endpoint.csv")
     stats.stats_by_task_and_endpoint().to_csv(path_stats_task_endpoint, index=False)
-    logging.info(f"Stats by task and endpoint saved: {path_stats_task_endpoint}")
-
+    logging.info(f"\tStats by task and endpoint saved: {path_stats_task_endpoint}")
 

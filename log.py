@@ -1,6 +1,6 @@
 import sys
 import logging
-from logging.handlers import RotatingFileHandler
+# from logging.handlers import RotatingFileHandler
 
 SIZE=80
 
@@ -64,7 +64,8 @@ def setup_logging(results_directory, verbosity):
     root_logger.addHandler(console_handler)
 
     # Handler para arquivo com rotação
-    file_handler = RotatingFileHandler(logging_filename, maxBytes=100000, backupCount=5)
+    # file_handler = RotatingFileHandler(logging_filename, maxBytes=100000, backupCount=5)
+    file_handler = logging.FileHandler(logging_filename)
     file_handler.setLevel(verbosity)
     file_handler.setFormatter(logging.Formatter(log_format))
     root_logger.addHandler(file_handler)
@@ -83,7 +84,7 @@ def print_global_run_plan_summary(
     interval_requests,
     total_runs_all
 ):
-    logging.info("=== Global Run Plan Summary ===")
+    logging.info("Global Run Plan Summary")
     logging.info("")
     logging.info(f"- Mode                : {mode}")
     logging.info(f"- Run Types           : {run_types}")
@@ -200,13 +201,14 @@ def print_end_summary(
     logging.info("=" * SIZE)
     
 
-def print_global_summary(phase_label, workers, duration, global_api, global_bc, global_total, global_rps):
+def print_global_summary(phase_label, users, duration, global_api, global_bc, global_total, global_rps, 
+                         global_api_success, global_api_fail, global_bc_success, global_bc_fail):
     logging.info("=" * 60)
     logging.info(f"GLOBAL SUMMARY ({phase_label.upper()}):")
-    logging.info(f"  - Workers        : {workers}")
+    logging.info(f"  - Users          : {users}")
     logging.info(f"  - Duration       : {duration:.2f}s")
-    logging.info(f"  - Total API      : {global_api}")
-    logging.info(f"  - Total BC       : {global_bc}")
+    logging.info(f"  - Total API      : {global_api} (Success: {global_api_success} | Fail: {global_api_fail})")
+    logging.info(f"  - Total BC       : {global_bc} (Success: {global_bc_success} | Fail: {global_bc_fail})")
     logging.info(f"  - Total Requests : {global_total}")
     logging.info(f"  - Global RPS     : {global_rps:.2f}")
     logging.info("=" * 60)

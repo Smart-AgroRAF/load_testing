@@ -76,7 +76,7 @@ class LoadTester:
             except Exception as e:
                 logging.error(f"[User-{user.user_id:03d}] Failed to fund wallet {user.wallet.address}: {e}")
         
-
+        logging.info("")
         logging.info("Funded users")
 
         for user in self.users:
@@ -171,6 +171,10 @@ class LoadTester:
         # Capture initial state
         start_api_count = user.api_requests_counter
         start_bc_count = user.blockchain_requests_counter
+        start_api_success = user.api_success
+        start_api_fail = user.api_fail
+        start_bc_success = user.bc_success
+        start_bc_fail = user.bc_fail
         start_time = time.perf_counter()
 
         while (time.perf_counter() - start_time) < duration:
@@ -196,27 +200,42 @@ class LoadTester:
         end_time = time.perf_counter()
         end_api_count = user.api_requests_counter
         end_bc_count = user.blockchain_requests_counter
+        end_api_success = user.api_success
+        end_api_fail = user.api_fail
+        end_bc_success = user.bc_success
+        end_bc_fail = user.bc_fail
 
         delta_api = end_api_count - start_api_count
         delta_bc = end_bc_count - start_bc_count
+        
+        # Calculate success/fail deltas
+        delta_api_success = end_api_success - start_api_success
+        delta_api_fail = end_api_fail - start_api_fail
+        delta_bc_success = end_bc_success - start_bc_success
+        delta_bc_fail = end_bc_fail - start_bc_fail
+
         total_requests = delta_api + delta_bc
         elapsed_time = end_time - start_time
         
         rps = total_requests / elapsed_time if elapsed_time > 0 else 0.0
 
-        logging.info(
-            f"[User-{user_id:03d}] Finished {run_function.__name__}. "
-            f"Duration: {elapsed_time:.2f}s | "
-            f"API Reqs: {delta_api} | "
-            f"BC Reqs: {delta_bc} | "
-            f"Total: {total_requests} | "
-            f"RPS: {rps:.2f}"
-        )
+        
+        logging.info(f"[User-{user_id:03d}] Finished {run_function.__name__}")
+        logging.info(f"  - Duration       : {elapsed_time:.2f}s")
+        logging.info(f"  - API Reqs       : {delta_api} (Success: {delta_api_success} | Fail: {delta_api_fail})")
+        logging.info(f"  - BC Reqs        : {delta_bc} (Success: {delta_bc_success} | Fail: {delta_bc_fail})")
+        logging.info(f"  - Total          : {total_requests}")
+        logging.info(f"  - RPS            : {rps:.2f}")
+        
 
         return {
             "api": delta_api,
             "bc": delta_bc,
-            "total": total_requests
+            "total": total_requests,
+            "api_success": delta_api_success,
+            "api_fail": delta_api_fail,
+            "bc_success": delta_bc_success,
+            "bc_fail": delta_bc_fail
         }
 
 
@@ -255,6 +274,10 @@ class LoadTester:
             global_api = 0
             global_bc = 0
             global_total = 0
+            global_api_success = 0
+            global_api_fail = 0
+            global_bc_success = 0
+            global_bc_fail = 0
 
             for future in concurrent.futures.as_completed(futures):
                 try:
@@ -263,6 +286,10 @@ class LoadTester:
                         global_api += res["api"]
                         global_bc += res["bc"]
                         global_total += res["total"]
+                        global_api_success += res["api_success"]
+                        global_api_fail += res["api_fail"]
+                        global_bc_success += res["bc_success"]
+                        global_bc_fail += res["bc_fail"]
                 except Exception as e:
                     logging.error(f"[THREAD ERROR] -> {type(e).__name__}: {e}")
 
@@ -270,7 +297,11 @@ class LoadTester:
         
         global_rps = global_total / total_time if total_time > 0 else 0.0
         
-        log.print_global_summary("STATIC", self.number_users, total_time, global_api, global_bc, global_total, global_rps)
+        log.print_global_summary(
+            "STATIC", self.number_users, total_time, 
+            global_api, global_bc, global_total, global_rps,
+            global_api_success, global_api_fail, global_bc_success, global_bc_fail
+        )
 
 
         if phase == "api-tx-build":
@@ -289,7 +320,11 @@ class LoadTester:
                 "api": global_api,
                 "bc": global_bc,
                 "total": global_total,
-                "rps": global_rps
+                "rps": global_rps,
+                "api_success": global_api_success,
+                "api_fail": global_api_fail,
+                "bc_success": global_bc_success,
+                "bc_fail": global_bc_fail
             }
         }
 
@@ -325,6 +360,10 @@ class LoadTester:
             global_api = 0
             global_bc = 0
             global_total = 0
+            global_api_success = 0
+            global_api_fail = 0
+            global_bc_success = 0
+            global_bc_fail = 0
             
             for future in concurrent.futures.as_completed(futures):
                 try:
@@ -333,6 +372,10 @@ class LoadTester:
                         global_api += res["api"]
                         global_bc += res["bc"]
                         global_total += res["total"]
+                        global_api_success += res["api_success"]
+                        global_api_fail += res["api_fail"]
+                        global_bc_success += res["bc_success"]
+                        global_bc_fail += res["bc_fail"]
                 except Exception as e:                
                     logging.error(f"[THREAD ERROR] -> {type(e).__name__}: {e}")
 
@@ -340,9 +383,12 @@ class LoadTester:
 
         global_rps = global_total / total_time if total_time > 0 else 0.0
 
-        log.print_global_summary("RAMP-UP", self.number_users, total_time, global_api, global_bc, global_total, global_rps)
+        log.print_global_summary(
+            "RAMP-UP", self.number_users, total_time, 
+            global_api, global_bc, global_total, global_rps,
+            global_api_success, global_api_fail, global_bc_success, global_bc_fail
+        )
         
-
 
         if phase == "api-tx-build":
             results = self.results_tx_build
@@ -360,8 +406,12 @@ class LoadTester:
                 "api": global_api,
                 "bc": global_bc,
                 "total": global_total,
-                "rps": global_rps
-            }
+                "rps": global_rps,
+                "api_success": global_api_success,
+                "api_fail": global_api_fail,
+                "bc_success": global_bc_success,
+                "bc_fail": global_bc_fail
+        }
         }
 
 
