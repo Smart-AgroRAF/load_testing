@@ -5,7 +5,8 @@ import time
 import random
 import logging
 import requests
-import concurrent.futures
+import asyncio
+import aiohttp
 from typing import List, Dict, Type
 
 # Internal imports
@@ -17,7 +18,7 @@ from wallet.config import w3
 from stats import Stats
 
 class LoadTester:
-    """Performs HTTP load tests simulating multiple users."""
+    """Performs HTTP load tests simulating multiple users (Async core)."""
 
     def __init__(
         self, 
@@ -31,6 +32,12 @@ class LoadTester:
         step_users=None,
         interval_users=None,
         interval_requests=None,
+        # TCPConnector Configuration
+        connector_limit: int = 100,
+        connector_limit_per_host: int = 0,
+        connector_keepalive_timeout: float = 15.0,
+        connector_ttl_dns_cache: float = 10.0,
+        connector_force_close: bool = False
     ):
         if not issubclass(user_cls, User):
             raise TypeError(f"{user_cls.__name__} must inherit from User")
@@ -43,12 +50,18 @@ class LoadTester:
         self.contract = contract
         self.duration = duration
 
-
         self.interval_requests = interval_requests
         self.users = self._create_users(amount_users=users)
         self.number_users = len(self.users)
         self.step_users = step_users
         self.interval_users = interval_users
+
+        # Connector Config
+        self.connector_limit = connector_limit
+        self.connector_limit_per_host = connector_limit_per_host
+        self.connector_keepalive_timeout = connector_keepalive_timeout
+        self.connector_ttl_dns_cache = connector_ttl_dns_cache
+        self.connector_force_close = connector_force_close
 
         if self.mode == "api-blockchain":
             self._authorized_users()
@@ -77,13 +90,29 @@ class LoadTester:
                 logging.error(f"[User-{user.user_id:03d}] Failed to fund wallet {user.wallet.address}: {e}")
         
         logging.info("")
-        logging.info("Funded users")
+        logging.info("Funded users:")
+        logging.info("")
 
+        # Wallet.get_balance is async now, but property address is sync.
+        # We can skipping balance check here to avoid async complexity in Init
+        # or use a sync call via w3 directly if needed. 
+        # For now, listing addresses is enough.
         for user in self.users:
-            balance = user.wallet.get_balance()
-            logging.info(f"\t[User-{user.user_id:03d}] Wallet {user.wallet.address} balance: {balance} ETH")
+            try:
+                balance_wei = w3.eth.get_balance(user.wallet.address)
+                balance_eth = w3.from_wei(balance_wei, "ether")
+                logging.info(
+                    f"\t- User-{user.user_id:03d} "
+                    f"Wallet: {user.wallet.address[:8]}... "
+                    f"Balance: {balance_eth:.4f} ETH"
+                )
+            except Exception as e:
+                logging.error(
+                    f"\t- User-{user.user_id:03d} "
+                    f"Wallet: {user.wallet.address[:8]}... "
+                    f"Balance: Error ({e})"
+                )
 
-        logging.info("Finish fund users.")
 
     def _authorized_users(self):
 
@@ -104,7 +133,7 @@ class LoadTester:
         logging.info(f"\tUsers allowed : {len(addresses)}")
         logging.info("")
         for user in self.users:
-            logging.info(f"\t[User-{user.user_id:03d}] wallet : {user.wallet.address}")
+            logging.info(f"\t[User-{user.user_id:03d}] Wallet : {user.wallet.address}")
 
         logging.info("")
         logging.info("  Sending request to authorize batch addresses...")
@@ -163,8 +192,8 @@ class LoadTester:
         return users
 
 
-    def _run(self, user, user_id, duration, run_function, results_operation):
-        """Runs a single type of flow (API or Blockchain) for 'duration' seconds."""
+    async def _run(self, user, user_id, duration, run_function, results_operation):
+        """Runs a single type of flow (API or Blockchain) for 'duration' seconds (Async)."""
         
         logging.info(f"[User-{user_id:03d}] Starting run: {run_function.__name__}")
 
@@ -179,7 +208,13 @@ class LoadTester:
 
         while (time.perf_counter() - start_time) < duration:
             try:
-                results = run_function()
+                # Await the user function
+                # Note: run_function (sequential or random) updates sequences/etc
+                # If run_function is async, await it.
+                if asyncio.iscoroutinefunction(run_function):
+                    results = await run_function()
+                else:
+                    results = run_function() # Should ideally be async
 
                 for result in results:
                     results_operation.append(result)
@@ -195,6 +230,8 @@ class LoadTester:
                     "duration": -1,
                     "status": f"fail ({type(e).__name__})"
                 })
+                # Small sleep to prevent tight loop in case of repeated immediate errors
+                await asyncio.sleep(0.1)
 
         # Capture final state and calculate stats
         end_time = time.perf_counter()
@@ -202,6 +239,8 @@ class LoadTester:
         end_bc_count = user.blockchain_requests_counter
         end_api_success = user.api_success
         end_api_fail = user.api_fail
+        end_bc_success = user.bc_success
+        end_bc_fail = user.bc_fail
         end_bc_success = user.bc_success
         end_bc_fail = user.bc_fail
 
@@ -219,14 +258,20 @@ class LoadTester:
         
         rps = total_requests / elapsed_time if elapsed_time > 0 else 0.0
 
-        
+        # logging.info(
+        #     f"[User-{user_id:03d}] Finished {run_function.__name__}\n"
+        #     f"  - Duration       : {elapsed_time:.2f}s\n"
+        #     f"  - API Reqs       : {delta_api} (Success: {delta_api_success} | Fail: {delta_api_fail})\n"
+        #     f"  - BC Reqs        : {delta_bc} (Success: {delta_bc_success} | Fail: {delta_bc_fail})\n"
+        #     f"  - Total          : {total_requests}\n"
+        #     f"  - RPS            : {rps:.2f}\n"
+        # )
         logging.info(f"[User-{user_id:03d}] Finished {run_function.__name__}")
-        logging.info(f"  - Duration       : {elapsed_time:.2f}s")
-        logging.info(f"  - API Reqs       : {delta_api} (Success: {delta_api_success} | Fail: {delta_api_fail})")
-        logging.info(f"  - BC Reqs        : {delta_bc} (Success: {delta_bc_success} | Fail: {delta_bc_fail})")
-        logging.info(f"  - Total          : {total_requests}")
-        logging.info(f"  - RPS            : {rps:.2f}")
-        
+        logging.info(f"\t- Duration       : {elapsed_time:.2f}s")
+        logging.info(f"\t- API Reqs       : {delta_api} (Success: {delta_api_success} | Fail: {delta_api_fail})")
+        logging.info(f"\t- BC Reqs        : {delta_bc} (Success: {delta_bc_success} | Fail: {delta_bc_fail})")
+        logging.info(f"\t- Total          : {total_requests}")
+        logging.info(f"\t- RPS            : {rps:.2f}")
 
         return {
             "api": delta_api,
@@ -239,61 +284,81 @@ class LoadTester:
         }
 
 
-    def simulate_user(self, phase, user_id: int, duration: float, interval_requests: float):
-        """Runs the user's sequence of Tasks for 'duration' seconds."""
+    async def simulate_user(self, phase, user_id: int, duration: float, interval_requests: float):
+        """Runs the user's sequence of Tasks for 'duration' seconds (Async)."""
 
         user = self.users[user_id - 1]
         
-        counts = {"api": 0, "bc": 0, "total": 0}
+        # Initialize User Session
+        connector = aiohttp.TCPConnector(
+            limit=self.connector_limit, 
+            limit_per_host=self.connector_limit_per_host,
+            keepalive_timeout=self.connector_keepalive_timeout,
+            ttl_dns_cache=self.connector_ttl_dns_cache,
+            force_close=self.connector_force_close
+        )
+        user.session = aiohttp.ClientSession(connector=connector)
 
-        # 1. sequential API + Blockchain (API-TX_BUILD)
-        if phase == "api-tx-build":
-            counts = self._run(user, user_id, duration, user.run_sequential_request, self.results_tx_build)
+        try:
+            counts = {
+                "api": 0, "bc": 0, "total": 0, 
+                "api_success": 0, "api_fail": 0, 
+                "bc_success": 0, "bc_fail": 0
+            }
 
-        # 2. random API (API-READ-ONLY)
-        if phase == "api-read-only":
-            counts = self._run(user, user_id, duration, user.run_random_request, self.results_read_only)
-            
-        return counts
+            # 1. sequential API + Blockchain (API-TX_BUILD)
+            if phase == "api-tx-build":
+                counts = await self._run(user, user_id, duration, user.run_sequential_request, self.results_tx_build)
+
+            # 2. random API (API-READ-ONLY)
+            if phase == "api-read-only":
+                counts = await self._run(user, user_id, duration, user.run_random_request, self.results_read_only)
+                
+            return counts
+        
+        finally:
+            await user.session.close()
             
 
     def run_static_load(self, phase, output_file=None):
 
-        """Runs a static load test."""
+        """Runs a static load test (Async wrapper)."""
     
         logging.info(f"Starting static load test with {self.number_users} users for {self.duration}s...")
         logging.info("")
+        
+        async def main_async():
+             start_time = time.perf_counter()
+             tasks = [
+                 self.simulate_user(phase=phase, user_id=user_id, duration=self.duration, interval_requests=self.interval_requests)                
+                 for user_id in range(1, self.number_users + 1)
+             ]
+             results = await asyncio.gather(*tasks)
+             total_time = round(time.perf_counter() - start_time, 2)
+             return results, total_time
 
-        start_time = time.perf_counter()
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.number_users) as executor:
-            futures = [
-                executor.submit(self.simulate_user, phase=phase, user_id=user_id, duration=self.duration, interval_requests=self.interval_requests)                
-                for user_id in range(1, self.number_users + 1)
-            ]
+        # Execute async loop
+        results_list, total_time = asyncio.run(main_async())
 
-            global_api = 0
-            global_bc = 0
-            global_total = 0
-            global_api_success = 0
-            global_api_fail = 0
-            global_bc_success = 0
-            global_bc_fail = 0
 
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    res = future.result()
-                    if res:
-                        global_api += res["api"]
-                        global_bc += res["bc"]
-                        global_total += res["total"]
-                        global_api_success += res["api_success"]
-                        global_api_fail += res["api_fail"]
-                        global_bc_success += res["bc_success"]
-                        global_bc_fail += res["bc_fail"]
-                except Exception as e:
-                    logging.error(f"[THREAD ERROR] -> {type(e).__name__}: {e}")
+        global_api = 0
+        global_bc = 0
+        global_total = 0
+        global_api_success = 0
+        global_api_fail = 0
+        global_bc_success = 0
+        global_bc_fail = 0
 
-        total_time = round(time.perf_counter() - start_time, 2)
+        for res in results_list:
+            if res:
+                global_api += res["api"]
+                global_bc += res["bc"]
+                global_total += res["total"]
+                global_api_success += res["api_success"]
+                global_api_fail += res["api_fail"]
+                global_bc_success += res["bc_success"]
+                global_bc_fail += res["bc_fail"]
+
         
         global_rps = global_total / total_time if total_time > 0 else 0.0
         
@@ -330,14 +395,15 @@ class LoadTester:
 
     def run_ramp_up_load(self, phase, output_file=None):
 
-        """Runs a ramp-up load test, adding users gradually."""
+        """Runs a ramp-up load test, adding users gradually (Async wrapper)."""
         
         logging.info(f"Starting ramp-up load test with up to {self.number_users} users...")
         logging.info("")
     
-        start_time = time.perf_counter()
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.number_users) as executor:
-            futures = []
+        
+        async def main_ramp_up():
+            start_time = time.perf_counter()
+            tasks = []
             active_users = 0
 
             while active_users < self.number_users:
@@ -345,41 +411,46 @@ class LoadTester:
                 new_users = min(self.step_users, self.number_users - active_users)
                 for i in range(new_users):
                     user_id = active_users + i + 1
-                    futures.append(
-                        executor.submit(self.simulate_user, phase=phase, user_id=user_id, duration=self.duration, interval_requests=self.interval_requests)
+                    # Start task
+                    task = asyncio.create_task(
+                        self.simulate_user(phase=phase, user_id=user_id, duration=self.duration, interval_requests=self.interval_requests)
                     )
+                    tasks.append(task)
 
                 active_users += new_users
                 logging.info(f"Active users: {active_users}/{self.number_users}")
 
                 # Wait for the time between increments
                 if active_users < self.number_users:
-                    time.sleep(self.interval_users)
+                    await asyncio.sleep(self.interval_users)
 
-            # Wait for all threads to finish
-            global_api = 0
-            global_bc = 0
-            global_total = 0
-            global_api_success = 0
-            global_api_fail = 0
-            global_bc_success = 0
-            global_bc_fail = 0
-            
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    res = future.result()
-                    if res:
-                        global_api += res["api"]
-                        global_bc += res["bc"]
-                        global_total += res["total"]
-                        global_api_success += res["api_success"]
-                        global_api_fail += res["api_fail"]
-                        global_bc_success += res["bc_success"]
-                        global_bc_fail += res["bc_fail"]
-                except Exception as e:                
-                    logging.error(f"[THREAD ERROR] -> {type(e).__name__}: {e}")
+            # Wait for all tasks to finish
+            results = await asyncio.gather(*tasks)
+            total_time = round(time.perf_counter() - start_time, 2)
+            return results, total_time
 
-        total_time = round(time.perf_counter() - start_time, 2)
+        # Execute
+        results_list, total_time = asyncio.run(main_ramp_up())
+
+
+        global_api = 0
+        global_bc = 0
+        global_total = 0
+        global_api_success = 0
+        global_api_fail = 0
+        global_bc_success = 0
+        global_bc_fail = 0
+        
+        for res in results_list:
+            if res:
+                global_api += res["api"]
+                global_bc += res["bc"]
+                global_total += res["total"]
+                global_api_success += res["api_success"]
+                global_api_fail += res["api_fail"]
+                global_bc_success += res["bc_success"]
+                global_bc_fail += res["bc_fail"]
+
 
         global_rps = global_total / total_time if total_time > 0 else 0.0
 
@@ -413,5 +484,3 @@ class LoadTester:
                 "bc_fail": global_bc_fail
         }
         }
-
-

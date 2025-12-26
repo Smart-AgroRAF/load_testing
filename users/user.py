@@ -2,7 +2,8 @@ import json
 import time
 import random
 import logging
-import requests
+import asyncio
+import aiohttp
 from functools import partial
 
 # Internal imports
@@ -13,7 +14,7 @@ from tasks.task_blockchain import TaskBlockchain
 from config import TIMEOUT_API
 
 class User:
-    """Simulates a user performing API or blockchain operations."""
+    """Simulates a user performing API or blockchain operations (Async)."""
 
     def __init__(self, host, mode, contract, user_id, interval_requests, campaign_names: list):
 
@@ -41,13 +42,16 @@ class User:
         self.sequence_step = 0
         self.last_token_id = None
 
+        # Session will be initialized in run_... methods or passed in
+        self.session = None
+
         # READ-ONLY campaigns
         self.available_campaigns_read_only = self._build_user_campaigns_read_only()
 
         # TX-BUILD SEQUENTIAL campaigns
         self.available_campaigns_tx_build = self._build_user_campaigns_sequential_tx_build()
 
-        logging.info(f"\t[User-{self.user_id:03d}] wallet : {self.wallet.address}")
+        logging.info(f"\t[User-{self.user_id:03d}] Wallet : {self.wallet.address}")
 
         self.task_api = TaskAPI(host, user_id)
         self.task_blockchain = TaskBlockchain(self.wallet, user_id)
@@ -86,10 +90,7 @@ class User:
                 )
 
                 # Passo 1: Mint (adiciona a função _step_mint à sequência)
-                # IMPORTANTE: Precisamos capturar endpoint e payload para evitar problemas com o loop abaixo
-                # Por isso, usamos a mesma técnica de factory/closure ou default args
                 mint_endpoint, mint_payload = campaign_requests[0]
-                
                 self.tx_build_sequence.append(partial(self._step_mint, mint_endpoint, mint_payload))
 
                 # Passo 2: Get Token (adiciona a função _step_get_token)
@@ -97,16 +98,14 @@ class User:
 
                 # Passos seguintes: Transações que dependem do token_id
                 for endpoint, payload in campaign_requests[1:]:
-                    # Usamos uma função auxiliar para capturar as variáveis ep e pl corretamente
                     self.tx_build_sequence.append(partial(self._step_tx, endpoint, payload))
         
-        # O retorno original não é mais necessário, pois a sequência está em self.tx_build_sequence
-        return campaigns_dict # Pode retornar um dict vazio ou ser removido
+        return campaigns_dict
 
 
-    def _step_mint(self, endpoint, payload):
-           """Passo 1: Executa o mintRootBatchTx."""
-           measured_results, _, status = self._measure_api_block(
+    async def _step_mint(self, endpoint, payload):
+           """Passo 1: Executa o mintRootBatchTx (Async)."""
+           measured_results, _, status = await self._measure_api_block(
                endpoint=endpoint,
                payload=payload,
                task_type="API-TX-BUILD"
@@ -116,37 +115,45 @@ class User:
                self.sequence_step = 0
            return measured_results
    
-    def _step_get_token(self):
-        """Passo 2: Executa o getUsersBatches e armazena o token ID."""
+    async def _step_get_token(self):
+        """Passo 2: Executa o getUsersBatches e armazena o token ID (Async)."""
         try:
             contract = self.contract.lower().replace("-", "")
             endpoint = f"/api/{contract}/getUsersBatches"
             url = self.host + endpoint
             
-            response = requests.post(
+            # Use aiohttp
+            async with self.session.post(
                 url=url,
                 json={"userAddress": [self.wallet.address]},
                 headers={"Content-Type": "application/json"},
+                # timeout=aiohttp.ClientTimeout(total=TIMEOUT_API)
                 timeout=TIMEOUT_API
-            )
+            ) as response:
             
-            body = response.json()
+                if response.status != 200:
+                    raise Exception(f"HTTP Error {response.status}")
+
+                body = await response.json()
 
             if (
                 not body or "results" not in body or len(body["results"]) == 0 or
                 "tokenIds" not in body["results"][0] or len(body["results"][0]["tokenIds"]) == 0
             ):
-                raise ValueError("No tokenIds found for this user.")
+                logging.debug(f"[User-{self.user_id:03d}] [GET-TOKEN] Failed to find tokenIds. Body: {body}")
+                raise ValueError(f"No tokenIds found for this user. Contract: {self.contract}")
 
             token_id = body["results"][0]["tokenIds"][-1]
             self.last_token_id = token_id # Armazena o token no estado do usuário
 
-            logging.debug(
-                f"{f'[User-{self.user_id:03d}]'}"
+            logging.info(
+                f"[User-{self.user_id:03d}]"
                 f" {f'[GET-TOKEN]':<15}"
                 f" {endpoint:31}"
                 f" TokenId: {token_id}"
+                f" Body: {body}"
             )
+            
             return [] # Este passo não gera resultados medidos
         except Exception as e:
             logging.error(f"[User-{self.user_id:03d}] Erro em _step_get_token: {e}", exc_info=True)
@@ -154,8 +161,8 @@ class User:
             # Retorna um erro formatado como os outros resultados
             return [{"timestamp": int(time.time()), "user_id": self.user_id, "endpoint": "get_token_error", "status_code": "error", "duration": -1, "status": f"fail ({type(e).__name__})"}]
  
-    def _step_tx(self, endpoint, payload):
-        """Passos seguintes: Executa uma transação genérica que precisa de um token ID."""
+    async def _step_tx(self, endpoint, payload):
+        """Passos seguintes: Executa uma transação genérica que precisa de um token ID (Async)."""
         if self.last_token_id is None:
             # Se não temos um token, não podemos continuar. Reiniciamos a sequência.
             logging.warning(f"[User-{self.user_id:03d}] Pulando passo de TX pois o token ID não foi definido.")
@@ -164,7 +171,7 @@ class User:
 
         updated_payload = self._replace_token_id(payload, self.last_token_id)
 
-        measured_results, _, status = self._measure_api_block(
+        measured_results, _, status = await self._measure_api_block(
             endpoint=endpoint,
             payload=updated_payload,
             task_type="API-TX-BUILD"
@@ -176,17 +183,16 @@ class User:
         return measured_results
 
 
-    def _api_request(self, endpoint, payload, task_type):
-        """Executes one API request and increments request counter."""
+    async def _api_request(self, endpoint, payload, task_type):
+        """Executes one API request and increments request counter (Async)."""
         self.api_requests_counter += 1
-        # self.requests_counter += 1
-
-        result = self.task_api.run_request(
+        
+        result, transaction = await self.task_api.run_request(
+            session=self.session,
             endpoint=endpoint,
             payload=payload,
             task_type=task_type,
             request_id=self.api_requests_counter
-            # request_id=self.requests_counter
         )
 
         if result and ((isinstance(result, dict) and result.get("status") == "success") or (isinstance(result, tuple) and result[0].get("status") == "success")):
@@ -195,39 +201,36 @@ class User:
              self.api_fail += 1
 
         if self.interval_requests:
-            time.sleep(self.interval_requests)
+            await asyncio.sleep(self.interval_requests)
         
-        return result
+        return result, transaction
 
 
-
-    def _blockchain_execute(self, tx_obj, endpoint):
-        """Executes a blockchain transaction if mode == api-blockchain."""
+    async def _blockchain_execute(self, tx_obj, endpoint):
+        """Executes a blockchain transaction if mode == api-blockchain (Async)."""
         if self.mode != "api-blockchain":
             return [], None, None
 
         self.blockchain_requests_counter += 1
-        # self.requests_counter += 1
 
-        result = self.task_blockchain.execute(
+        # Await execution
+        result, tx_hash, status = await self.task_blockchain.execute(
             tx_obj=tx_obj,
             endpoint=endpoint,
             request_id=self.blockchain_requests_counter
-            # request_id=self.requests_counter
         )
 
-        status = result[2]
         if status == "success":
             self.bc_success += 1
         else:
             self.bc_fail += 1
             
-        return result
+        return result, tx_hash, status
 
 
     # RANDOM MODE (READ-ONLY)
-    def run_random_request(self):
-        """Executes a random READ-ONLY request."""
+    async def run_random_request(self):
+        """Executes a random READ-ONLY request (Async)."""
         results = []
 
         try:
@@ -242,7 +245,7 @@ class User:
             # Select a random endpoint
             endpoint, payload = random.choice(campaign)
 
-            api_result, _ = self._api_request(endpoint, payload, "API-READ-ONLY")
+            api_result, _ = await self._api_request(endpoint, payload, "API-READ-ONLY")
             results.append(api_result)
 
             return results
@@ -275,9 +278,9 @@ class User:
 
 
 
-    def _measure_api_block(self, endpoint, payload, task_type):
+    async def _measure_api_block(self, endpoint, payload, task_type):
         """
-        Executes API + blockchain and appends a synthetic [API-BLOCK] result.
+        Executes API + blockchain and appends a synthetic [API-BLOCK] result (Async).
 
         Returns:
             (results_list, tx_body, blockchain_status)
@@ -285,25 +288,24 @@ class User:
 
         start_time = time.perf_counter()
 
-        # API
-        api_result, tx_body = self._api_request(
+        # API - returns (result_dict, tx_body_json)
+        # Note: _api_request returns (result, transaction)
+        api_result, tx_body = await self._api_request(
             endpoint=endpoint,
             payload=payload,
             task_type=task_type
         )
 
         # BLOCKCHAIN
-        bc_results, _, status = self._blockchain_execute(tx_body, endpoint)
+        bc_results, _, status = await self._blockchain_execute(tx_body, endpoint)
 
         duration = time.perf_counter() - start_time
 
         if self.interval_requests:
-            time.sleep(self.interval_requests)
+            await asyncio.sleep(self.interval_requests)
 
         logging.debug(
             f"[User-{self.user_id:03d}]"
-            # f" [Req-{self.requests_counter:03d}]"
-            # f" [REQ-FULL-{self.blockchain_requests_counter:03d}]"
             f" {f'[REQ-BLOCK-{self.blockchain_requests_counter:03d}]':<15}"
             f" {f'[FULL]':<15}"
             f" {endpoint:<31}"
@@ -315,7 +317,6 @@ class User:
             "timestamp": int(time.time()),
             "user_id": self.user_id,
             "request": self.blockchain_requests_counter,
-            # "request": self.requests_counter,
             "task": "FULL",
             "endpoint": endpoint,
             "duration": duration,
@@ -329,23 +330,28 @@ class User:
 
         return results_combined, tx_body, status
 
-    def run_sequential_request(self):
+    async def run_sequential_request(self):
         """
-        Executa UM passo do fluxo sequencial de TX:
-        mintRootBatchTx -> getUsersBatches -> splitBatchTx -> etc.
+        Executa UM passo do fluxo sequencial de TX (Async).
         """
         try:
             if not self.tx_build_sequence:
-                # Se a sequência não foi criada, não há nada a fazer
                 raise RuntimeError("Nenhuma sequência de TX-BUILD disponível para este usuário.")
 
             # Pega a função correspondente ao passo atual
             step_function = self.tx_build_sequence[self.sequence_step]
 
-            # Executa o passo
-            results = step_function()
+            # Executa o passo (await)
+            # Como usamos partial, se a função original for async, o partial retorna uma coroutine quando chamado?
+            # Não, partial apenas fixa argumentos. Se a função for async, ela retorna coroutine.
+            
+            if asyncio.iscoroutinefunction(step_function) or (isinstance(step_function, partial) and asyncio.iscoroutinefunction(step_function.func)):
+                 results = await step_function()
+            else:
+                 # Fallback synchronous? Need to ensure all steps are async
+                 results = step_function()
 
-            # Avança para o próximo passo. O operador '%' faz com que volte a 0 no final.
+
             self.sequence_step = (self.sequence_step + 1) % len(self.tx_build_sequence)
 
             return results
@@ -355,7 +361,6 @@ class User:
                 f"[User-{self.user_id:03d}] Erro em run_sequential_request (passo {self.sequence_step}): {e}",
                 exc_info=True
             )
-            # Em caso de falha, reinicia a sequência para evitar travamentos
             self.sequence_step = 0
             return [{
                 "timestamp": int(time.time()),
@@ -365,6 +370,3 @@ class User:
                 "duration": -1,
                 "status": f"fail ({type(e).__name__})"
             }]
-
-
-

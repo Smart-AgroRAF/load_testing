@@ -30,7 +30,7 @@ def create_directory(current_directory, child_directory):
     return directory
 
 
-def save_run_args(run_directory, users, spawn_rate, run_time, host, contract, mode):
+def save_run_args(run_directory, host, mode, contract, run, duration, users, step_users, interval_users, interval_requests):
     """
     Save run configuration parameters into a JSON file.
 
@@ -40,20 +40,21 @@ def save_run_args(run_directory, users, spawn_rate, run_time, host, contract, mo
     args_file = os.path.join(run_directory, ARGS_RUN_FILENAME)
 
     args_data = {
-        "users": users,
-        "spawn_rate": spawn_rate,
-        "run_time": run_time,
         "host": host,
-        "contract": contract,
         "mode": mode,
+        "contract": contract,
+        "duration": duration,
+        "run": run,
+        "users": users,
+        "step-users": step_users,
+        "interval-users": interval_users,
+        "interval-requests": interval_requests,
     }
 
     with open(args_file, "w") as f:
         json.dump(args_data, f, indent=2)
 
-    logging.info(f"[Save] Saved run arguments : {args_file}")
-    logging.debug(f"[Save] Saved run arguments : {json.dumps(args_data, indent=2)}")
-
+    return args_file
 
 def save_resume(run_directory, total_time):
     """Save a summary (resume) file with the total execution time."""
@@ -157,13 +158,8 @@ def save_all_outputs(run_data, phase_name, output_file):
     workers = run_data.get("users", 0) # run_data uses "users" key for worker count
     total_time = run_data.get("total_time", 0)
     global_stats = run_data.get("global_stats", {})
-
-    # 1. Save Raw Results (out.csv)
-    save_results(results, output_file)
-    logging.info(f"\tRaw results saved: {output_file}")
     
-    # 2. Save Global Summary (stats_global.csv)
-    # display_path = os.path.join(os.path.dirname(output_file), "stats_global.csv")
+    # Save Global Summary (stats_global.csv)
     summary_path = os.path.join(os.path.dirname(output_file), "stats_global.csv")
     save_global_performance_summary(
         summary_path, 
@@ -179,28 +175,32 @@ def save_all_outputs(run_data, phase_name, output_file):
         bc_success=global_stats.get("bc_success", 0),
         bc_fail=global_stats.get("bc_fail", 0)
     )
-    logging.info(f"\tGlobal stats saved: {summary_path}")
+    
 
-    # 3. Generate and Save Detailed Statistics
-    # Re-use the logic from main.py to generate stats by task/endpoint
+    #Generate and Save Detailed Statistics
     phase_dir = os.path.dirname(output_file)
     percentiles = [.5, .6, .7, .8, .9, .99]
     stats = Stats(percentiles=percentiles)
+
+    save_results(results, output_file)
+    logging.info(f"\t- Raw results saved                : {output_file}")
 
     # Load the results we just saved
     stats.load_multiple_csv([
         (output_file, {phase_name}),
     ])
 
+    logging.info(f"\t- Global stats saved               : {summary_path}")
+
     path_stats_task = os.path.join(phase_dir, "stats_task.csv")
     stats.stats_by_task().to_csv(path_stats_task, index=False)
-    logging.info(f"\tStats by task saved: {path_stats_task}")
+    logging.info(f"\t- Stats by task saved              : {path_stats_task}")
 
     path_stats_endpoint = os.path.join(phase_dir, "stats_endpoint.csv")
     stats.stats_by_endpoint().to_csv(path_stats_endpoint, index=False)
-    logging.info(f"\tStats by endpoint saved: {path_stats_endpoint}")
+    logging.info(f"\t- Stats by endpoint saved          : {path_stats_endpoint}")
 
     path_stats_task_endpoint = os.path.join(phase_dir, "stats_task_endpoint.csv")
     stats.stats_by_task_and_endpoint().to_csv(path_stats_task_endpoint, index=False)
-    logging.info(f"\tStats by task and endpoint saved: {path_stats_task_endpoint}")
+    logging.info(f"\t- Stats by task and endpoint saved : {path_stats_task_endpoint}")
 
