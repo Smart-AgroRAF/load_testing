@@ -69,14 +69,14 @@ def send_transaction(
         # logging.info(f"\tTo      : {target}")
         # logging.info(f"\tAmount  : {amount_eth} ETH")
         # logging.info(f"\tAttempt : {attempt}/{max_retries}")
-        logging.info(
-            f"[Admin] {'Transaction sent':<21} "
-            f"User-{user_id:03d} "
-            f"Wallet: {target[:8]}... "
-            f"{str(amount_eth)} ETH "
-            f"Hash: {tx_hash.hex()[:8]}... "
-            f"{attempt}/{max_retries}"
-        )
+        # logging.debug(
+        #     f"[Admin] {'Transaction sent':<21} "
+        #     f"User-{user_id:03d} "
+        #     f"Wallet: {target[:8]}... "
+        #     f"{str(amount_eth)} ETH "
+        #     f"Hash: {tx_hash.hex()[:8]}... "
+        #     f"{attempt}/{max_retries}"
+        # )
 
         if wait_receipt:
             receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=240)
@@ -87,11 +87,12 @@ def send_transaction(
             # logging.info(f"\tUser    : {user_id:03d}")
             # logging.info(f"\tStatus  : {status.capitalize()}")
             logging.info(
-                f"[Admin] {'Transaction confirmed':<21} "
+                f"[Admin] Send "
                 f"User-{user_id:03d} " 
                 f"Wallet: {target[:8]}... "
                 f"{str(amount_eth)} ETH "
                 f"Hash: {tx_hash.hex()[:8]}... "
+                f"{attempt}/{max_retries}"
                 f"{status.capitalize()}"
             )
 

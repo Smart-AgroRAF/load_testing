@@ -1,10 +1,11 @@
 #!/bin/bash
 
 python main.py \
-	--users 3 5 10 \
-	--duration 10 10 10\
+	--users 3 \
+	--duration 10\
 	--type paired \
 	--mode api-blockchain \
-	--run static \
+	--run both \
 	--contract both \
-	--interval-requests 1
+	--interval-requests 1 \
+	--verbosity 10

@@ -16,4 +16,13 @@ except Exception as e:
     w3 = None
 
 # Lock para garantir que o nonce seja acessado de forma thread-safe
+# Lock para garantir que o nonce seja acessado de forma thread-safe
 NONCE_LOCK = threading.Lock()
+
+# Async Web3 Provider
+try:
+    from web3 import AsyncWeb3, AsyncHTTPProvider
+    async_w3 = AsyncWeb3(AsyncHTTPProvider(BESU_RPC_URL))
+except Exception as e:
+    print(f"Erro ao inicializar AsyncWeb3: {e}")
+    async_w3 = None

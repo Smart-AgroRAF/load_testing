@@ -77,72 +77,75 @@ def setup_logging(results_directory, verbosity):
 
 
 def print_global_run_plan_summary(
+    host,
     mode, 
-    run_types, 
-    contracts_to_run, 
+    runs, 
+    contracts, 
     combos, 
     interval_requests,
     total_runs_all
 ):
     logging.info("Global Run Plan Summary")
     logging.info("")
-    logging.info(f"- Mode                : {mode}")
-    logging.info(f"- Run Types           : {run_types}")
-    logging.info(f"- Contracts           : {contracts_to_run}")
-    logging.info(f"- Users               : {[u for (u, _, _, _) in combos]}")
-    logging.info(f"- Step Users          : {[s for (_, s, _, _) in combos]}")
-    logging.info(f"- Interval Users(s)   : {[r for (_, _, r, _) in combos]}")
-    logging.info(f"- Duration(s)         : {[d for (_, _, _, d) in combos]}")
-    logging.info(f"- Interval Request(s) : {interval_requests}")
-    logging.info(f"- Total runs          : {total_runs_all}")
-    logging.info("")
+    logging.info(f"\t- Host                : {host}")
+    logging.info(f"\t- Mode                : {mode}")
+    logging.info(f"\t- Runs                : {runs}")
+    logging.info(f"\t- Duration(s)         : {[d for (_, _, _, d) in combos]}")
+    logging.info(f"\t- Contracts           : {contracts}")
+    logging.info(f"\t- Users               : {[u for (u, _, _, _) in combos]}")
+    logging.info(f"\t- Step Users          : {[s for (_, s, _, _) in combos]}")
+    logging.info(f"\t- Interval Users(s)   : {[r for (_, _, r, _) in combos]}")
+    logging.info(f"\t- Interval Request(s) : {interval_requests}")
+    logging.info(f"\t- Total runs          : {total_runs_all}")
+    logging.info("-" * SIZE)
 
-    _print_runs(
-        total_runs_all=total_runs_all,
-        mode=mode,
-        run_types=run_types,    
-        contracts_to_run=contracts_to_run,
-        combos=combos,
-        interval_requests=interval_requests,
-    )
-
-def _print_runs(
-    total_runs_all,
-    mode, 
-    run_types,
-    contracts_to_run,
-    combos,
-    interval_requests
-):
     run_number = 0
-    for contract in contracts_to_run:
+    for contract in contracts:
         for idx, (users, step_users, interval_users, duration) in enumerate(combos, start=1):
-            for run_idx, run_type in enumerate(run_types):
+            for run_idx, run in enumerate(runs):
                 run_number += 1
                 logging.info(f"- Run {run_number}/{total_runs_all}:")
-                print_args_run(mode, run_type, contract, users, step_users, interval_users, duration, interval_requests)
+                print_args_run(
+                    host=host,
+                    mode=mode, 
+                    contract=contract, 
+                    run=run,
+                    duration=duration,
+                    users=users, 
+                    step_users=step_users, 
+                    interval_users=interval_users, 
+                    interval_requests=interval_requests,
+                )
                 if not (run_number == total_runs_all):
                     logging.info("")
     logging.info("=" * SIZE)
 
-def print_args_run(mode, run_type, contract, users, step_users, interval_users, duration, interval_requests):
+def print_args_run(
+    host,
+    mode, 
+    contract, 
+    run, 
+    duration,
+    users, 
+    step_users, 
+    interval_users, 
+    interval_requests,
+    args_file=None,
+):
 
-    if run_type == "static":
-        logging.info(f"   - Mode             : {mode}")
-        logging.info(f"   - Run Type         : {run_type}")
-        logging.info(f"   - Contract         : {contract}")
-        logging.info(f"   - Users            : {users}")
-        logging.info(f"   - Duration         : {duration}s")
-        logging.info(f"   - Request Interval : {interval_requests}s")
-    elif run_type == "ramp-up":
-        logging.info(f"   - Mode             : {mode}")
-        logging.info(f"   - Run Type         : {run_type}")
-        logging.info(f"   - Contract         : {contract}")
-        logging.info(f"   - Users            : {users}")
-        logging.info(f"   - Step Users       : {step_users}")
-        logging.info(f"   - Interval Users   : {interval_users}s")
-        logging.info(f"   - Duration         : {duration}s")
-        logging.info(f"   - Request Interval : {interval_requests}s")
+    logging.info(f"\t- Host                : {host}")
+    logging.info(f"\t- Mode                : {mode}")
+    logging.info(f"\t- Contract            : {contract}")
+    logging.info(f"\t- Run                 : {run}")
+    logging.info(f"\t- Duration            : {duration}s")
+    logging.info(f"\t- Users               : {users}")
+    if run == "ramp-up":
+        logging.info(f"\t- Step Users          : {step_users}")
+        logging.info(f"\t- Interval Users      : {interval_users}s")
+    logging.info(f"\t- Interval Request    : {interval_requests}s")
+    if args_file:
+        logging.info(f"\t- Saved run arguments : {args_file}")
+        # logging.debug(f"\t- Saved run arguments : {json.dumps(args_data, indent=2)}")
 
 
 def print_end_summary(
@@ -201,16 +204,27 @@ def print_end_summary(
     logging.info("=" * SIZE)
     
 
-def print_global_summary(phase_label, users, duration, global_api, global_bc, global_total, global_rps, 
-                         global_api_success, global_api_fail, global_bc_success, global_bc_fail):
+def print_global_summary(
+    phase_label,
+    users,
+    duration,
+    global_api,
+    global_bc,
+    global_total,
+    global_rps,
+    global_api_success,
+    global_api_fail,
+    global_bc_success,
+    global_bc_fail,
+):
     logging.info("=" * 60)
     logging.info(f"GLOBAL SUMMARY ({phase_label.upper()}):")
-    logging.info(f"  - Users          : {users}")
-    logging.info(f"  - Duration       : {duration:.2f}s")
-    logging.info(f"  - Total API      : {global_api} (Success: {global_api_success} | Fail: {global_api_fail})")
-    logging.info(f"  - Total BC       : {global_bc} (Success: {global_bc_success} | Fail: {global_bc_fail})")
-    logging.info(f"  - Total Requests : {global_total}")
-    logging.info(f"  - Global RPS     : {global_rps:.2f}")
+    logging.info(f"\t- Users          : {users}")
+    logging.info(f"\t- Duration       : {duration:.2f}s")
+    logging.info(f"\t- Total API      : {global_api} (Success: {global_api_success} | Fail: {global_api_fail})")
+    logging.info(f"\t- Total BC       : {global_bc} (Success: {global_bc_success} | Fail: {global_bc_fail})")
+    logging.info(f"\t- Total Requests : {global_total}")
+    logging.info(f"\t- Global RPS     : {global_rps:.2f}")
     logging.info("=" * 60)
 
     

@@ -216,4 +216,4 @@ def log_plot_creation(filepath):
     Args:
         filepath: relative path to the created plot file.
     """
-    logging.info(f"\tGenerated plot: {filepath}")
+    logging.info(f"\t- Generated plot: {filepath}")

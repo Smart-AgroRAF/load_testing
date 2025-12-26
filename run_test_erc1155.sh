@@ -8,3 +8,4 @@ python main.py \
 	--run static \
 	--contract erc1155 \
 	--interval-requests 1
+
