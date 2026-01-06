@@ -140,18 +140,24 @@ class User:
                 not body or "results" not in body or len(body["results"]) == 0 or
                 "tokenIds" not in body["results"][0] or len(body["results"][0]["tokenIds"]) == 0
             ):
-                logging.debug(f"[User-{self.user_id:03d}] [GET-TOKEN] Failed to find tokenIds. Body: {body}")
-                raise ValueError(f"No tokenIds found for this user. Contract: {self.contract}")
-
-            token_id = body["results"][0]["tokenIds"][-1]
+                if self.mode == "api-only":
+                    # In api-only mode, we don't mint on chain, so we won't find tokens.
+                    # We simulate a token ID to allow the process to continue.
+                    token_id = random.randint(1000, 1000000)
+                    logging.debug(f"[User-{self.user_id:03d}] [GET-TOKEN] api-only mode: Simulating TokenId: {token_id}")
+                else: 
+                    logging.debug(f"[User-{self.user_id:03d}] [GET-TOKEN] Failed to find tokenIds. Body: {body}")
+                    raise ValueError(f"No tokenIds found for this user. Contract: {self.contract}")
+            else:
+                token_id = body["results"][0]["tokenIds"][-1]
             self.last_token_id = token_id # Armazena o token no estado do usuário
 
-            logging.info(
+            logging.debug(
                 f"[User-{self.user_id:03d}]"
                 f" {f'[GET-TOKEN]':<15}"
                 f" {endpoint:31}"
                 f" TokenId: {token_id}"
-                f" Body: {body}"
+                # f" Body: {body}"
             )
             
             return [] # Este passo não gera resultados medidos
@@ -320,7 +326,7 @@ class User:
             "task": "FULL",
             "endpoint": endpoint,
             "duration": duration,
-            "status": ""
+            "status": status
         }
         
         # Build final result list
