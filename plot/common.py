@@ -37,17 +37,18 @@ def convert_users_to_int(val):
 
 def scan_results(root_dir):
     """
-    Scans for results using args_run.json for metadata.
+    Scans for stats_task.csv files (consolidated stats) instead of out*.csv.
     Returns DataFrame compatible with plot_experiments.py logic.
     """
     data = []
     
     for root, dirs, files in os.walk(root_dir):
-        if "out.csv" in files:
+        if "stats_task.csv" in files:
             # Check for args_run.json
             parent_dir = os.path.dirname(root)
             args_path = os.path.join(parent_dir, "args_run.json")
-            if not os.path.exists(args_path): args_path = os.path.join(root, "args_run.json")
+            if not os.path.exists(args_path): 
+                args_path = os.path.join(root, "args_run.json")
 
             if os.path.exists(args_path):
                 try:
@@ -56,45 +57,59 @@ def scan_results(root_dir):
                     
                     users = convert_users_to_int(args_run.get('users', 0))
                     erc_type = args_run.get('contract', 'unknown')
-                    # Experiment type is directory name
                     exp_type = os.path.basename(root)
                     
-                    df = pd.read_csv(os.path.join(root, "out.csv"))
+                    # Read stats_task.csv
+                    stats_file = os.path.join(root, "stats_task.csv")
+                    df = pd.read_csv(stats_file)
                     
-                    filtered_df = pd.DataFrame()
-                    if exp_type == "api-read-only":
-                        filtered_df = df[df["status"] == "success"].copy()
-                    elif exp_type == "api-tx-build":
-                        filtered_df = df[df["task"] == "FULL"].copy()
+                    if df.empty:
+                        continue
                     
-                    if not filtered_df.empty:
-                        mean_dur = filtered_df['duration'].mean()
-                        std_dur = filtered_df['duration'].std()
-                        count = len(filtered_df)
+                    # stats_task.csv has columns: task, count, mean, median, std, min, max, p50, p60, etc.
+                    # We need to aggregate across all tasks for this experiment
+                    # Calculate weighted mean and total count
+                    total_count = df['count'].sum()
+                    if total_count > 0:
+                        weighted_mean = (df['mean'] * df['count']).sum() / total_count
                         
-                        data.append({
-                            'erc': erc_type,
-                            'users': users,
-                            'experiment_type': exp_type,
-                            'mean': mean_dur,
-                            'std': std_dur,
-                            'count': count
-                        })
+                        # Incorporate both internal noise (std) and between-run noise (mean_std)
+                        # Variance = Mean of variances + Variance of means
+                        # We approximate this by summing squares of both types of noise
+                        internal_var = (df['std']**2 * df['count']).sum() / total_count
+                        between_run_var = (df.get('mean_std', 0)**2 * df['count']).sum() / total_count
+                        weighted_std = np.sqrt(internal_var + between_run_var)
+                    else:
+                        weighted_mean = 0
+                        weighted_std = 0
+                    
+                    data.append({
+                        'erc': erc_type,
+                        'users': users,
+                        'experiment_type': exp_type,
+                        'mean': weighted_mean,
+                        'std': weighted_std,
+                        'count': int(total_count)
+                    })
+
                 except Exception as e:
-                    logging.warning(f"Error scanning {root}: {e}")
+                    logging.warning(f"Error reading stats_task.csv in {root}: {e}")
+    
     return pd.DataFrame(data)
 
 def scan_results_throughput(root_dir, window_size=10):
     """
-    Scans results and calculates throughput using sliding time window.
+    Scans for stats_global.csv files to get RPS (throughput) data.
+    Returns DataFrame with throughput metrics.
     """
     data = []
     
     for root, dirs, files in os.walk(root_dir):
-        if "out.csv" in files:
+        if "stats_global.csv" in files:
             parent_dir = os.path.dirname(root)
             args_path = os.path.join(parent_dir, "args_run.json")
-            if not os.path.exists(args_path): args_path = os.path.join(root, "args_run.json")
+            if not os.path.exists(args_path): 
+                args_path = os.path.join(root, "args_run.json")
 
             if os.path.exists(args_path):
                 try:
@@ -105,45 +120,29 @@ def scan_results_throughput(root_dir, window_size=10):
                     erc_type = args_run.get('contract', 'unknown')
                     exp_type = os.path.basename(root)
                     
-                    df = pd.read_csv(os.path.join(root, "out.csv"))
+                    # Read stats_global.csv
+                    stats_file = os.path.join(root, "stats_global.csv")
+                    df = pd.read_csv(stats_file)
                     
-                    filtered_df = pd.DataFrame()
-                    if exp_type == "api-read-only":
-                        filtered_df = df[df["status"] == "success"].copy()
-                    elif exp_type == "api-tx-build":
-                        filtered_df = df[df["task"] == "FULL"].copy()
+                    if df.empty:
+                        continue
+                    
+                    # stats_global.csv has 'rps' column and may have multiple rows (phases)
+                    # We need to aggregate by taking the mean RPS across all phases
+                    total_rps = df['rps'].sum() if 'rps' in df.columns else 0
+                    
+                    data.append({
+                        'erc': erc_type,
+                        'users': users,
+                        'experiment_type': exp_type,
+                        'mean_throughput': total_rps,
+                        'std_throughput': 0,  # Not available in stats_global
+                        'count': 1
+                    })
 
-                    if not filtered_df.empty and len(filtered_df) > 1:
-                        filtered_df['timestamp'] = pd.to_numeric(filtered_df['timestamp'], errors='coerce')
-                        filtered_df = filtered_df.dropna(subset=['timestamp'])
-                        filtered_df = filtered_df.sort_values("timestamp")
-                        
-                        timestamps = filtered_df["timestamp"].values
-                        if len(timestamps) == 0: continue
-
-                        throughputs = []
-                        min_ts = timestamps.min()
-                        max_ts = timestamps.max()
-                        
-                        current_ts = min_ts
-                        while current_ts <= max_ts:
-                            window_end = current_ts + window_size
-                            count_in_window = np.sum((timestamps >= current_ts) & (timestamps < window_end))
-                            if count_in_window > 0:
-                                throughputs.append(count_in_window / window_size)
-                            current_ts += 1
-                        
-                        if throughputs:
-                            data.append({
-                                'erc': erc_type,
-                                'users': users,
-                                'experiment_type': exp_type,
-                                'mean_throughput': np.mean(throughputs),
-                                'std_throughput': np.std(throughputs),
-                                'count': len(throughputs)
-                            })
                 except Exception as e:
-                    logging.warning(f"Error throughput scanning {root}: {e}")
+                    logging.warning(f"Error reading stats_global.csv in {root}: {e}")
+    
     return pd.DataFrame(data)
 
 def scan_global_stats(root_dir):
@@ -206,8 +205,34 @@ def scan_global_stats(root_dir):
 
             except Exception as e:
                 logging.warning(f"Error reading {file_path}: {e}")
-                
-    return pd.DataFrame(data)
+    
+    # Aggregate by (contract, phase, users) to calculate mean and std across repetitions
+    result_df = pd.DataFrame(data)
+    if not result_df.empty:
+        # We want mean and std for each metric
+        agg_map = {
+            'total_requests': ['mean', 'std'],
+            'total_success': ['mean', 'std'],
+            'total_fail': ['mean', 'std'],
+            'rps': ['mean', 'std']
+        }
+        
+        result_df = result_df.groupby(['contract', 'phase', 'users'], as_index=False).agg(agg_map)
+        
+        # Flatten MultiIndex
+        # 'rps' -> 'rps', 'rps' -> 'rps_std'
+        new_cols = []
+        for col, func in result_df.columns:
+            if col in ['contract', 'phase', 'users']:
+                new_cols.append(col)
+            elif func == 'mean':
+                new_cols.append(col)
+            else:
+                new_cols.append(f"{col}_std")
+        
+        result_df.columns = new_cols
+    
+    return result_df
 
 def log_plot_creation(filepath):
     """
@@ -217,3 +242,136 @@ def log_plot_creation(filepath):
         filepath: relative path to the created plot file.
     """
     logging.info(f"\t- Generated plot: {filepath}")
+
+def scan_endpoint_stats(root_dir, phase_filter="api-read-only"):
+    """
+    Scans for out*.csv files and aggregates statistics per endpoint for experiments matching phase_filter.
+    Returns a DataFrame with columns: 
+    ['contract', 'users', 'endpoint', 'total_requests', 'total_success', 'total_fail', 'mean_duration']
+    """
+    data = []
+    
+    for root, dirs, files in os.walk(root_dir):
+        # Find all matching output files (out.csv, out_rep-1.csv, ...)
+        out_files = [f for f in files if f.startswith("out") and f.endswith(".csv")]
+        
+        if not out_files:
+            continue
+
+        # Check for args_run.json
+        parent_dir = os.path.dirname(root)
+        args_path = os.path.join(parent_dir, "args_run.json")
+        if not os.path.exists(args_path): args_path = os.path.join(root, "args_run.json")
+
+        if os.path.exists(args_path):
+            try:
+                with open(args_path, 'r') as f:
+                    args_run = json.load(f)
+                
+                # Check experiment type
+                exp_type = os.path.basename(root)
+                if exp_type != phase_filter:
+                        continue
+
+                users = convert_users_to_int(args_run.get('users', 0))
+                erc_type = args_run.get('contract', 'unknown')
+                
+                # Iterate over all found output files (repetitions)
+                for out_file in out_files:
+                    try:
+                        df = pd.read_csv(os.path.join(root, out_file))
+                        
+                        if df.empty:
+                            continue
+                            
+                        if "endpoint" not in df.columns:
+                            continue
+                            
+                        grouped = df.groupby("endpoint")
+                        
+                        for endpoint, group in grouped:
+                            total = len(group)
+                            success = (group["status"] == "success").sum()
+                            fail = total - success
+                            mean_dur = pd.to_numeric(group["duration"], errors='coerce').mean()
+                            
+                            data.append({
+                                "contract": erc_type,
+                                "users": users,
+                                "endpoint": endpoint,
+                                "total_requests": total,
+                                "total_success": success,
+                                "total_fail": fail,
+                                "mean_duration": mean_dur
+                            })
+                    except Exception as e_file:
+                        logging.warning(f"Error reading {out_file} in {root}: {e_file}")
+
+            except Exception as e:
+                logging.warning(f"Error scanning endpoint stats in {root}: {e}")
+                    
+    return pd.DataFrame(data)
+
+
+def scan_stats_endpoint_files(root_dir, phase_filter="api-read-only"):
+    """
+    Scans for stats_endpoint.csv files (consolidated stats) and extracts data for plotting.
+    This avoids reading individual out*.csv files which would create duplicate points.
+    
+    Returns a DataFrame with columns: 
+    ['contract', 'users', 'endpoint', 'total_requests', 'total_success', 'total_fail', 'mean_duration']
+    
+    Note: stats_endpoint.csv contains aggregated statistics (count, mean, etc.) but not
+    success/fail breakdown. We'll use 'count' as total_requests.
+    """
+    data = []
+    
+    for root, dirs, files in os.walk(root_dir):
+        if "stats_endpoint.csv" in files:
+            # Check for args_run.json
+            parent_dir = os.path.dirname(root)
+            args_path = os.path.join(parent_dir, "args_run.json")
+            if not os.path.exists(args_path): 
+                args_path = os.path.join(root, "args_run.json")
+
+            if os.path.exists(args_path):
+                try:
+                    with open(args_path, 'r') as f:
+                        args_run = json.load(f)
+                    
+                    # Check experiment type
+                    exp_type = os.path.basename(root)
+                    if exp_type != phase_filter:
+                        continue
+
+                    users = convert_users_to_int(args_run.get('users', 0))
+                    erc_type = args_run.get('contract', 'unknown')
+                    
+                    # Read stats_endpoint.csv
+                    stats_file = os.path.join(root, "stats_endpoint.csv")
+                    df = pd.read_csv(stats_file)
+                    
+                    if df.empty:
+                        continue
+                    
+                    # stats_endpoint.csv has columns: endpoint, count, mean, median, std, min, max, p50, p60, etc.
+                    # We use count as total_requests
+                    for _, row in df.iterrows():
+                        data.append({
+                            "contract": erc_type,
+                            "users": users,
+                            "endpoint": row.get('endpoint', ''),
+                            "total_requests": row.get('count'),
+                            "total_requests_std": row.get('count_std', float('nan')),
+                            "total_success": row.get('success_count'),
+                            "total_success_std": row.get('success_std', float('nan')),
+                            "total_fail": row.get('fail_count'),
+                            "total_fail_std": row.get('fail_std', float('nan')),
+                            "mean_duration": row.get('mean')
+                        })
+
+                except Exception as e:
+                    logging.warning(f"Error reading stats_endpoint.csv in {root}: {e}")
+                    
+    return pd.DataFrame(data)
+

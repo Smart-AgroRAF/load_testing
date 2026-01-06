@@ -22,47 +22,80 @@ def create_txbuild_stacked_plot(root_dir, output_dir):
 
     # 1. Scan specific for TX tasks
     for root, dirs, files in os.walk(root_dir):
-        if "out.csv" in files and "api-tx-build" in root:
-            # Metadata fetch
-            parent_dir = os.path.dirname(root)
-            args_path = os.path.join(parent_dir, "args_run.json")
-            if not os.path.exists(args_path): args_path = os.path.join(root, "args_run.json")
-            
-            if os.path.exists(args_path):
-                try:
-                    with open(args_path, 'r') as f:
-                        args_run = json.load(f)
-                    users = convert_users_to_int(args_run.get('users', 0))
-                    erc_type = args_run.get('contract', 'unknown')
+        # Look for out*.csv (out.csv, out_rep-1.csv, etc.)
+        output_files = [f for f in files if f.startswith("out") and f.endswith(".csv")]
+        
+        if not output_files or "api-tx-build" not in root:
+            continue
+
+        # Metadata fetch
+        parent_dir = os.path.dirname(root)
+        args_path = os.path.join(parent_dir, "args_run.json")
+        if not os.path.exists(args_path): args_path = os.path.join(root, "args_run.json")
+        
+        if os.path.exists(args_path):
+            try:
+                with open(args_path, 'r') as f:
+                    args_run = json.load(f)
+                users = convert_users_to_int(args_run.get('users', 0))
+                erc_type = args_run.get('contract', 'unknown')
+                
+                for out_file in output_files:
+                    df = pd.read_csv(os.path.join(root, out_file))
                     
-                    df = pd.read_csv(os.path.join(root, "out.csv"))
-                    
+                    if df.empty:
+                        continue
+
+                    # Success Filtering: Only include requests where TX-BLOCK was successful
+                    if 'status' in df.columns and 'task' in df.columns:
+                        # Identify successful requests
+                        success_requests = df[(df['task'] == 'TX-BLOCK') & (df['status'] == 'success')][['user_id', 'request']]
+                        # Filter dataframe to only keep rows from successful requests
+                        df_success = df.merge(success_requests, on=['user_id', 'request'])
+                    else:
+                        # Fallback for old data or if TX-BLOCK is missing status (shouldn't happen now)
+                        df_success = df
+
+                    if df_success.empty:
+                        continue
+
                     # Basic tasks
                     for task in ['API-TX-BUILD', 'TX-BUILD', 'TX-SIGN', 'TX-SEND']:
-                        task_data = df[df['task'] == task]
+                        task_data = df_success[df_success['task'] == task]
                         if not task_data.empty:
                             data.append({
                                 "erc": erc_type, "users": users, "task": task, "mean": task_data['duration'].mean()
                             })
                     
                     # QUEUE calculation (FULL - parts)
-                    full_data = df[df['task'] == 'FULL']
-                    api_data = df[df['task'] == 'API-TX-BUILD']
-                    tx_build = df[df['task'] == 'TX-BUILD']
-                    tx_sign = df[df['task'] == 'TX-SIGN']
-                    tx_send = df[df['task'] == 'TX-SEND']
+                    full_data = df_success[df_success['task'] == 'FULL']
+                    api_data = df_success[df_success['task'] == 'API-TX-BUILD']
+                    tx_build = df_success[df_success['task'] == 'TX-BUILD']
+                    tx_sign = df_success[df_success['task'] == 'TX-SIGN']
+                    tx_send = df_success[df_success['task'] == 'TX-SEND']
                     
                     if not full_data.empty and not api_data.empty and not tx_build.empty and not tx_send.empty:
-                        full_mean = full_data['duration'].mean()
-                        sum_parts = api_data['duration'].mean() + tx_build['duration'].mean() + tx_sign['duration'].mean() + tx_send['duration'].mean()
-                        queue_mean = full_mean - sum_parts
+                        # Group by user_id and request to calculate queue per transaction then average
+                        # This is more accurate than subtracting global means
+                        merged = pd.merge(full_data[['user_id', 'request', 'duration']], 
+                                        api_data[['user_id', 'request', 'duration']], on=['user_id', 'request'], suffixes=('_full', '_api'))
+                        merged = pd.merge(merged, tx_build[['user_id', 'request', 'duration']], on=['user_id', 'request'])
+                        merged = merged.rename(columns={'duration': 'duration_build'})
+                        merged = pd.merge(merged, tx_sign[['user_id', 'request', 'duration']], on=['user_id', 'request'])
+                        merged = merged.rename(columns={'duration': 'duration_sign'})
+                        merged = pd.merge(merged, tx_send[['user_id', 'request', 'duration']], on=['user_id', 'request'])
+                        merged = merged.rename(columns={'duration': 'duration_send'})
+
+                        merged['queue'] = merged['duration_full'] - (merged['duration_api'] + merged['duration_build'] + merged['duration_sign'] + merged['duration_send'])
+                        queue_mean = merged['queue'].mean()
                         
                         queue_data.append({
                             "erc": erc_type, "users": users, "task": "QUEUE", "mean": queue_mean
                         })
 
-                except Exception as e:
-                    pass
+            except Exception as e:
+                logging.error(f"Error processing {root}: {e}")
+                pass
 
     # Combine regular tasks + calculated QUEUE
     df_main = pd.DataFrame(data)
@@ -74,6 +107,10 @@ def create_txbuild_stacked_plot(root_dir, output_dir):
             df = df_queue
     else:
         df = df_main
+    
+    # Final aggregation: the above appends one mean per FILE. We need one mean per (erc, users, task)
+    if not df.empty:
+        df = df.groupby(['erc', 'users', 'task'])['mean'].mean().reset_index()
 
     if df.empty: return
 

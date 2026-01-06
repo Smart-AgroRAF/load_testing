@@ -58,32 +58,38 @@ def plot_success_fail(root_dir, output_dir):
             users = contract_data["users"]
             
             # Plot Total
-            plt.plot(
+            plt.errorbar(
                 users, contract_data["total_requests"], 
+                yerr=contract_data.get("total_requests_std"),
                 label=f"{contract} - Total", 
                 color=colors.get(contract, "black"),
+                capsize=3,
                 **styles["Total"]
             )
             
             # Plot Success
-            plt.plot(
+            plt.errorbar(
                 users, contract_data["total_success"], 
+                yerr=contract_data.get("total_success_std"),
                 label=f"{contract} - Success", 
                 color=colors.get(contract, "black"),
+                capsize=3,
                 **styles["Success"]
             )
             
             # Plot Fail
-            plt.plot(
+            plt.errorbar(
                 users, contract_data["total_fail"], 
+                yerr=contract_data.get("total_fail_std"),
                 label=f"{contract} - Fail", 
                 color=colors.get(contract, "black"),
+                capsize=3,
                 **styles["Fail"]
             )
 
-        plt.title(f"Request Counts ({phase})", fontsize=FONT_SIZE_TITLE)
-        plt.xlabel("Users", fontsize=FONT_SIZE)
-        plt.ylabel("Request Count", fontsize=FONT_SIZE)
+        plt.title(f"Quantidade de Requisições ({phase})", fontsize=FONT_SIZE_TITLE)
+        plt.xlabel("Quantidade de Usuários", fontsize=FONT_SIZE)
+        plt.ylabel("Quantidade de Requisições", fontsize=FONT_SIZE)
         plt.xticks(all_users)
         plt.grid(True, linestyle='--', alpha=0.7)
         plt.legend(fontsize=FONT_SIZE_LEGEND)
