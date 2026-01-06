@@ -11,7 +11,7 @@ from typing import List, Dict, Type
 
 # Internal imports
 import log
-from wallet.admin import fund_wallet
+from wallet.admin import fund_wallet, fund_wallets_batch
 from users.user import User
 from config import TIMEOUT_BLOCKCHAIN, AMOUNT_ETH
 from wallet.config import w3
@@ -32,6 +32,7 @@ class LoadTester:
         step_users=None,
         interval_users=None,
         interval_requests=None,
+        
         # TCPConnector Configuration
         connector_limit: int = 100,
         connector_limit_per_host: int = 0,
@@ -71,25 +72,23 @@ class LoadTester:
         self.results_read_only: List[Dict] = []
 
     def _fund_users(self):
+                
+        # Collect all recipients for batch funding
+        recipients = [(user.user_id, user.wallet.address) for user in self.users]
         
-        logging.info("-" * log.SIZE)
-        logging.info("Starting fund users...")
-        logging.info("")
+        # Use batch funding
+        results = fund_wallets_batch(
+            recipients=recipients,
+            amount_eth=AMOUNT_ETH,
+            gas_price_gwei=5,
+            max_retries=3,
+        )
         
-        for user in self.users:
-            try:
-                fund_wallet(
-                    user_id=user.user_id,
-                    target=user.wallet.address,
-                    amount_eth=AMOUNT_ETH,
-                    gas_price_gwei=5,
-                    wait_receipt=True,
-                    max_retries=3,
-                )
-            except Exception as e:
-                logging.error(f"[User-{user.user_id:03d}] Failed to fund wallet {user.wallet.address}: {e}")
+        # Log any failures
+        for user_id, success in results.items():
+            if not success:
+                logging.error(f"[User-{user_id:03d}] Failed to fund wallet")
         
-        logging.info("")
         logging.info("Funded users:")
         logging.info("")
 
@@ -102,7 +101,7 @@ class LoadTester:
                 balance_wei = w3.eth.get_balance(user.wallet.address)
                 balance_eth = w3.from_wei(balance_wei, "ether")
                 logging.info(
-                    f"\t- User-{user.user_id:03d} "
+                    f"\t- [User-{user.user_id:03d}] "
                     f"Wallet: {user.wallet.address[:8]}... "
                     f"Balance: {balance_eth:.4f} ETH"
                 )
@@ -129,15 +128,14 @@ class LoadTester:
             "allow": True
         }
        
-        logging.info(f"\tURL           : {url}")
-        logging.info(f"\tUsers allowed : {len(addresses)}")
+        logging.info(f"\t- URL : {url}")
         logging.info("")
+        logging.info("\t- Users:")
         for user in self.users:
-            logging.info(f"\t[User-{user.user_id:03d}] Wallet : {user.wallet.address}")
+            logging.info(f"\t\t[User-{user.user_id:03d}] Wallet : {user.wallet.address}")
 
         logging.info("")
-        logging.info("  Sending request to authorize batch addresses...")
-        logging.info("")
+        logging.info("Sending request to authorize batch addresses...")
 
         try:
             response = requests.post(
@@ -148,15 +146,14 @@ class LoadTester:
             )
 
             status_code = response.status_code
-            result_status = "success" if 200 <= status_code < 300 else "fail"
-            
-            logging.info(f"\tHTTP Status Code : {status_code}")
-            logging.info(f"\tStatus           : {result_status}")
+            result_status = "success" if 200 == status_code else "fail"
 
+            logging.info("")
             if status_code != 200:
                 logging.error(f"Authorization failed with status code {status_code}")
             else:
                 logging.info("All users authorized successfully.")
+            logging.info("")
 
         except requests.exceptions.Timeout:
             logging.error("Authorization request timed out ({timeout}s).")
@@ -166,8 +163,8 @@ class LoadTester:
             logging.error(f"An unexpected error occurred: {e}")
 
 
-        logging.info("")
         logging.info("Finish authorizing users for contract.")
+        logging.info("")
 
 
     def _create_users(self, amount_users: int):
@@ -195,7 +192,7 @@ class LoadTester:
     async def _run(self, user, user_id, duration, run_function, results_operation):
         """Runs a single type of flow (API or Blockchain) for 'duration' seconds (Async)."""
         
-        logging.info(f"[User-{user_id:03d}] Starting run: {run_function.__name__}")
+        logging.info(f"[User-{user_id:03d}] Starting run: {run_function.__name__}...")
 
         # Capture initial state
         start_api_count = user.api_requests_counter
@@ -258,14 +255,6 @@ class LoadTester:
         
         rps = total_requests / elapsed_time if elapsed_time > 0 else 0.0
 
-        # logging.info(
-        #     f"[User-{user_id:03d}] Finished {run_function.__name__}\n"
-        #     f"  - Duration       : {elapsed_time:.2f}s\n"
-        #     f"  - API Reqs       : {delta_api} (Success: {delta_api_success} | Fail: {delta_api_fail})\n"
-        #     f"  - BC Reqs        : {delta_bc} (Success: {delta_bc_success} | Fail: {delta_bc_fail})\n"
-        #     f"  - Total          : {total_requests}\n"
-        #     f"  - RPS            : {rps:.2f}\n"
-        # )
         logging.info(f"[User-{user_id:03d}] Finished {run_function.__name__}")
         logging.info(f"\t- Duration       : {elapsed_time:.2f}s")
         logging.info(f"\t- API Reqs       : {delta_api} (Success: {delta_api_success} | Fail: {delta_api_fail})")
@@ -323,7 +312,8 @@ class LoadTester:
     def run_static_load(self, phase, output_file=None):
 
         """Runs a static load test (Async wrapper)."""
-    
+        
+        logging.info("")
         logging.info(f"Starting static load test with {self.number_users} users for {self.duration}s...")
         logging.info("")
         
@@ -397,6 +387,7 @@ class LoadTester:
 
         """Runs a ramp-up load test, adding users gradually (Async wrapper)."""
         
+        logging.info("")
         logging.info(f"Starting ramp-up load test with up to {self.number_users} users...")
         logging.info("")
     
@@ -482,5 +473,5 @@ class LoadTester:
                 "api_fail": global_api_fail,
                 "bc_success": global_bc_success,
                 "bc_fail": global_bc_fail
-        }
+            }
         }

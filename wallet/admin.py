@@ -10,6 +10,7 @@ from web3 import Web3
 # Internal imports
 from config import PRIVATE_KEY, CONTRACT_ADDRESS, ABI_PATH
 from wallet.config import w3
+from log import SIZE
 
 # --- Locks e singletons ---
 _admin_account: Optional[Account] = None
@@ -25,8 +26,9 @@ def get_admin_account():
     with _admin_init_lock:
         if _admin_account is None:
             _admin_account = Account.from_key(PRIVATE_KEY)
-            logging.info("[Admin] Initializing admin account")
-            logging.info(f"\taddress: {_admin_account.address}")
+            logging.info("Initializing admin account")
+            logging.info("")
+            logging.info(f"\t- Admin address: {_admin_account.address}")
             logging.info("")
         return _admin_account
 
@@ -63,14 +65,14 @@ def send_transaction(
     try:
         tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
 
-        # logging.info(f"[Admin] Transaction sent")
+        # logging.info(f"Transaction sent")
         # logging.info(f"\tHash    : {tx_hash.hex()}")
         # logging.info(f"\tUser    : {user_id:03d}")
         # logging.info(f"\tTo      : {target}")
         # logging.info(f"\tAmount  : {amount_eth} ETH")
         # logging.info(f"\tAttempt : {attempt}/{max_retries}")
         # logging.debug(
-        #     f"[Admin] {'Transaction sent':<21} "
+        #     f"{'Transaction sent':<21} "
         #     f"User-{user_id:03d} "
         #     f"Wallet: {target[:8]}... "
         #     f"{str(amount_eth)} ETH "
@@ -82,17 +84,17 @@ def send_transaction(
             receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=240)
             status = "success" if receipt.status == 1 else "failed"
 
-            # logging.info(f"[Admin] Transaction confirmed")
+            # logging.info(f"Transaction confirmed")
             # logging.info(f"\tHash    : {tx_hash.hex()}")
             # logging.info(f"\tUser    : {user_id:03d}")
             # logging.info(f"\tStatus  : {status.capitalize()}")
             logging.info(
-                f"[Admin] Send "
+                f"Send "
                 f"User-{user_id:03d} " 
                 f"Wallet: {target[:8]}... "
                 f"{str(amount_eth)} ETH "
                 f"Hash: {tx_hash.hex()[:8]}... "
-                f"{attempt}/{max_retries}"
+                f"{attempt}/{max_retries} "
                 f"{status.capitalize()}"
             )
 
@@ -101,7 +103,7 @@ def send_transaction(
         return tx_hash, None
 
     except Exception as e:
-        logging.info(f"[Admin] Transaction error: {e}")
+        logging.info(f"Transaction error: {e}")
         return None, None
 
 
@@ -120,7 +122,7 @@ def fund_wallet(
     admin = get_admin_account()
 
     if not Web3.is_address(target):
-        logging.info(f"[Admin] Invalid target address: {target}")
+        logging.info(f"Invalid target address: {target}")
         return False
 
     for attempt in range(1, max_retries + 1):
@@ -141,7 +143,7 @@ def fund_wallet(
 
                 if balance < total_cost:
                     logging.error(
-                        f"[Admin] Saldo insuficiente: balance={w3.from_wei(balance,'ether')} "
+                        f"Saldo insuficiente: balance={w3.from_wei(balance,'ether')} "
                         f"< required={w3.from_wei(total_cost,'ether')} ETH "
                         f"(user={user_id}, target={target})"
                     )
@@ -175,12 +177,141 @@ def fund_wallet(
                 return True
 
         except Exception as e:
-            logging.info(f"[Admin] ETH transfer error: {e}")
+            logging.info(f"ETH transfer error: {e}")
 
         time.sleep(0.5 * attempt)
 
-    logging.info(f"[Admin] ETH transfer failed target: {target}")
+    logging.info(f"ETH transfer failed target: {target}")
     return False
+
+
+# -------------------------------------
+# FUND WALLETS BATCH - NEW
+# -------------------------------------
+def fund_wallets_batch(
+    recipients: list,  # List of (user_id, address) tuples
+    amount_eth: float = 1.0,
+    gas_price_gwei: int = 5,
+    max_retries: int = 2
+) -> dict:
+    """
+    Fund multiple wallets in batch by sending all transactions asynchronously,
+    then waiting for all receipts in parallel.
+    
+    Returns:
+        dict: {user_id: success_bool}
+    """
+    admin = get_admin_account()
+    results = {}
+    
+    if not recipients:
+        return results
+    
+        
+    logging.info("-" * SIZE)
+    logging.info(f"Starting batch funding for {len(recipients)} users...")
+    logging.info("")
+    
+    for attempt in range(1, max_retries + 1):
+        pending_txs = []  # List of (user_id, tx_hash)
+        
+        try:
+            with _admin_tx_lock:
+                # Get starting nonce
+                base_nonce = _get_nonce_rpc(admin.address)
+                
+                gas_price = _get_gas_price_wei(gas_price_gwei)
+                gas_limit = 21000
+                value_wei = w3.to_wei(amount_eth, "ether")
+                
+                # Check admin balance
+                balance = w3.eth.get_balance(admin.address)
+                total_cost = len(recipients) * (value_wei + gas_limit * gas_price)
+                
+                if balance < total_cost:
+                    logging.error(
+                        f"Insufficient balance for batch: "
+                        f"balance={w3.from_wei(balance,'ether')} < "
+                        f"required={w3.from_wei(total_cost,'ether')} ETH"
+                    )
+                    return {user_id: False for user_id, _ in recipients}
+                
+                # Build and send all transactions
+                for idx, (user_id, target) in enumerate(recipients):
+                    if not Web3.is_address(target):
+                        logging.warning(f"Invalid address for user {user_id}: {target}")
+                        results[user_id] = False
+                        continue
+                    
+                    tx = {
+                        "from": admin.address,
+                        "to": Web3.to_checksum_address(target),
+                        "value": value_wei,
+                        "gas": gas_limit,
+                        "gasPrice": gas_price,
+                        "nonce": base_nonce + idx,
+                        "chainId": _get_chain_id(),
+                    }
+                    
+                    signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
+                    
+                    try:
+                        tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+                        pending_txs.append((user_id, tx_hash, target))
+                        logging.info(
+                            f"\t- Sent batch tx {idx+1}/{len(recipients)} "
+                            f"User-{user_id:03d} {target[:8]}... "
+                            f"Hash: {tx_hash.hex()[:8]}..."
+                        )
+                    except Exception as e:
+                        logging.error(f"Failed to send tx for user {user_id}: {e}")
+                        results[user_id] = False
+            
+            # Wait for all receipts in parallel
+            logging.info("")
+            logging.info(f"Waiting for {len(pending_txs)} transaction confirmations...")
+            logging.info("")
+            
+            for user_id, tx_hash, target in pending_txs:
+                try:
+                    receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=240)
+                    success = receipt.status == 1
+                    results[user_id] = success
+                    
+                    status = "success" if success else "failed"
+
+                    logging.info(
+                        f"\t- Batch confirmed "
+                        f"User-{user_id:03d} {target[:8]}... "
+                        f"{amount_eth} ETH "
+                        f"Hash: {tx_hash.hex()[:8]}... "
+                        f"{status.capitalize()}"
+                    )
+                except Exception as e:
+                    logging.error(f"Failed to get receipt for user {user_id}: {e}")
+                    results[user_id] = False
+            
+            # Check if all succeeded
+            if all(results.get(uid, False) for uid, _ in recipients if uid in results):
+                logging.info("")
+                logging.info(f"Batch funding completed successfully!")
+                logging.info("")
+                return results
+            
+        except Exception as e:
+            logging.error(f"Batch funding error (attempt {attempt}/{max_retries}): {e}")
+        
+        if attempt < max_retries:
+            time.sleep(1.0 * attempt)
+    
+    # Mark any remaining users as failed
+    for user_id, _ in recipients:
+        if user_id not in results:
+            results[user_id] = False
+    
+    logging.warning(f"Batch funding completed with some failures")
+    return results
+
 
 
 # -------------------------------------
