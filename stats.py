@@ -17,7 +17,12 @@ class Stats:
 
         for path, _label in files:
             df = pd.read_csv(path)
+            
+            # Ensure duration and timestamp are numeric
             df["duration"] = pd.to_numeric(df["duration"], errors="coerce")
+            if "timestamp" in df.columns:
+                df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce")
+            
             df.dropna(subset=["duration"], inplace=True)
             frames.append(df)
 
@@ -25,14 +30,23 @@ class Stats:
 
     # ---- Helpers ----
     def _compute_stats(self, group: pd.DataFrame):
+        count = len(group)
+        if count == 0:
+            return pd.Series(dtype=float)
+        
         stats = {
-            "count": len(group),
+            "count": count,
             "mean": group["duration"].mean(),
             "median": group["duration"].median(),
             "std": group["duration"].std(),
             "min": group["duration"].min(),
             "max": group["duration"].max(),
         }
+        
+        # Add success/fail counts if status column exists
+        if "status" in group.columns:
+            stats["success_count"] = (group["status"] == "success").sum()
+            stats["fail_count"] = (group["status"] == "fail").sum()
 
         for p in self.percentiles:
             stats[f"p{int(p * 100)}"] = group["duration"].quantile(p)
@@ -42,14 +56,24 @@ class Stats:
     # ---- Stats by dimensions ----
     def stats_by_task(self):
         return (
-            self.df.groupby("task")[["duration"]]
+            self.df.groupby("task")[["duration", "status"]]
             .apply(lambda g: self._compute_stats(g))
             .reset_index()
         )
 
     def stats_by_endpoint(self):
+        # Filter for representative tasks to avoid overcounting operations
+        # 'FULL' represents a write operation (API + BC)
+        # 'API-READ-ONLY' represents a read operation
+        representative_tasks = ["FULL", "API-READ-ONLY"]
+        df_rep = self.df[self.df["task"].isin(representative_tasks)]
+        
+        # Fallback if no representative tasks found (e.g. old data or different phase)
+        if df_rep.empty:
+            df_rep = self.df
+
         return (
-            self.df.groupby("endpoint")[["duration"]]
+            df_rep.groupby("endpoint")[["duration", "status"]]
             .apply(lambda g: self._compute_stats(g))
             .reset_index()
         )
@@ -62,8 +86,19 @@ class Stats:
         )
 
     # ---- Global stats ----
-    def global_stats(self, total_time: float, phase):
+    def global_stats(self, phase, total_time: float = None):
         df = self.df
+
+        # If total_time is not provided, calculate it from timestamps
+        if total_time is None:
+            if not df.empty and "timestamp" in df.columns:
+                start_ts = df["timestamp"].min()
+                end_ts = df["timestamp"].max()
+                total_time = end_ts - start_ts
+            
+            # Default to a small value if 0 or still None to avoid division by zero
+            if total_time is None or total_time <= 0:
+                total_time = 1.0 
 
         # total_requests = len(df)
         if phase == "api-tx-build":

@@ -2,6 +2,7 @@ import os
 import csv
 import json
 import logging
+import pandas as pd
 from datetime import datetime
 from stats import Stats
 
@@ -150,58 +151,173 @@ def save_all_outputs(run_data, phase_name, output_file):
     if not output_file:
         return
 
-    logging.info(f"Saving outputs for phase: {phase_name}")
-    logging.info("")
-    
-    # Unpack run_data
+    logging.info(f"Saving raw outputs for phase: {phase_name}")
     results = run_data.get("results", [])
-    users = run_data.get("users", 0) # run_data uses "users" key for worker count
-    workers = run_data.get("users", 0) # run_data uses "users" key for worker count
-    total_time = run_data.get("total_time", 0)
-    global_stats = run_data.get("global_stats", {})
-    
-    # Save Global Summary (stats_global.csv)
-    summary_path = os.path.join(os.path.dirname(output_file), "stats_global.csv")
-    save_global_performance_summary(
-        summary_path, 
-        workers, 
-        total_time, 
-        global_stats.get("api", 0), 
-        global_stats.get("bc", 0), 
-        global_stats.get("total", 0), 
-        global_stats.get("rps", 0),
-        phase=phase_name,
-        api_success=global_stats.get("api_success", 0),
-        api_fail=global_stats.get("api_fail", 0),
-        bc_success=global_stats.get("bc_success", 0),
-        bc_fail=global_stats.get("bc_fail", 0)
-    )
-    
-
-    #Generate and Save Detailed Statistics
-    phase_dir = os.path.dirname(output_file)
-    percentiles = [.5, .6, .7, .8, .9, .99]
-    stats = Stats(percentiles=percentiles)
-
     save_results(results, output_file)
-    logging.info(f"\t- Raw results saved                : {output_file}")
+    logging.info(f"\t- Raw results saved: {output_file}")
 
-    # Load the results we just saved
-    stats.load_multiple_csv([
-        (output_file, {phase_name}),
-    ])
 
-    logging.info(f"\t- Global stats saved               : {summary_path}")
+def consolidate_stats(run_directory, phase_name):
+    """
+    Scans the phase directory for all 'out*.csv' files, aggregates them using Stats,
+    and saves consolidated statistics files (averages/stats across all repetitions).
+    """
+    phase_dir = os.path.join(run_directory, phase_name)
+    if not os.path.isdir(phase_dir):
+        logging.warning(f"[Consolidate] Phase directory not found: {phase_dir}")
+        return
 
+    # Find all output files (out.csv, out_rep-1.csv, etc.)
+    out_files = [
+        os.path.join(phase_dir, f) 
+        for f in os.listdir(phase_dir) 
+        if f.startswith("out") and f.endswith(".csv")
+    ]
+
+    if not out_files:
+        logging.warning(f"[Consolidate] No output files found in {phase_dir}")
+        return
+
+    logging.info(f"[Consolidate] Aggregating {len(out_files)} files in {phase_name}...")
+
+    # Initialize lists to store metrics per repetition
+    task_reps = []
+    endpoint_reps = []
+    task_endpoint_reps = []
+
+    # 1. Collect Stats per repetition
+    for of in sorted(out_files):
+        try:
+            s_rep = Stats(percentiles=[.5, .9, .99])
+            s_rep.load_multiple_csv([(of, {phase_name})])
+            
+            task_reps.append(s_rep.stats_by_task())
+            endpoint_reps.append(s_rep.stats_by_endpoint())
+            task_endpoint_reps.append(s_rep.stats_by_task_and_endpoint())
+        except Exception as e:
+            logging.warning(f"[Consolidate] Failed to process repetition {of}: {e}")
+
+    # 2. Meta-Aggregation (Average and Std across repetitions)
+    def aggregate_reps(df_list, group_cols):
+        if not df_list:
+            return pd.DataFrame()
+        
+        all_df = pd.concat(df_list, ignore_index=True)
+        
+        # We aggregate specific columns: count, success_count, fail_count, and metrics
+        # We use mean() and std() for some, and specific min/max for others
+        agg_map = {
+            "count": ["mean", "std"],
+            "mean": ["mean", "std"],
+            "std": ["mean"],
+            "min": ["min"],
+            "max": ["max"],
+            "median": ["mean"]
+        }
+        
+        # Add success/fail counts if they exist in the dataframe
+        if "success_count" in all_df.columns:
+            agg_map["success_count"] = ["mean", "std"]
+        if "fail_count" in all_df.columns:
+            agg_map["fail_count"] = ["mean", "std"]
+        
+        # Percentiles (if multiple reps, we just take the mean of the percentiles)
+        percentile_cols = [c for c in all_df.columns if c.startswith("p") and c[1:].isdigit()]
+        for p in percentile_cols:
+            agg_map[p] = ["mean"]
+
+        # Perform aggregation
+        grouped = all_df.groupby(group_cols).agg(agg_map)
+        
+        # Flatten MultiIndex columns
+        # Structure: (column, function) -> "column" if function in ['mean','min','max'] else "name_std"
+        new_cols = []
+        for col, func in grouped.columns:
+            if func in ["mean", "min", "max"]:
+                new_cols.append(col)
+            elif func == "std":
+                # Rename success_count_std -> success_std for plotter compatibility
+                name = col.replace("_count", "")
+                new_cols.append(f"{name}_std")
+            else:
+                new_cols.append(f"{col}_{func}")
+        
+        grouped.columns = new_cols
+        return grouped.reset_index()
+
+    # Save consolidated stats files
     path_stats_task = os.path.join(phase_dir, "stats_task.csv")
-    stats.stats_by_task().to_csv(path_stats_task, index=False)
-    logging.info(f"\t- Stats by task saved              : {path_stats_task}")
+    df_task = aggregate_reps(task_reps, ["task"])
+    if not df_task.empty:
+        df_task.to_csv(path_stats_task, index=False)
+        logging.info(f"\t- Consolidated Stats by task       : {path_stats_task}")
 
     path_stats_endpoint = os.path.join(phase_dir, "stats_endpoint.csv")
-    stats.stats_by_endpoint().to_csv(path_stats_endpoint, index=False)
-    logging.info(f"\t- Stats by endpoint saved          : {path_stats_endpoint}")
+    df_endpoint = aggregate_reps(endpoint_reps, ["endpoint"])
+    if not df_endpoint.empty:
+        df_endpoint.to_csv(path_stats_endpoint, index=False)
+        logging.info(f"\t- Consolidated Stats by endpoint   : {path_stats_endpoint}")
 
     path_stats_task_endpoint = os.path.join(phase_dir, "stats_task_endpoint.csv")
-    stats.stats_by_task_and_endpoint().to_csv(path_stats_task_endpoint, index=False)
-    logging.info(f"\t- Stats by task and endpoint saved : {path_stats_task_endpoint}")
+    df_task_endpoint = aggregate_reps(task_endpoint_reps, ["task", "endpoint"])
+    if not df_task_endpoint.empty:
+        df_task_endpoint.to_csv(path_stats_task_endpoint, index=False)
+        logging.info(f"\t- Consolidated Stats task/endpoint : {path_stats_task_endpoint}")
+    
+    # 3. Generate Global Summary (stats_global.csv)
+    if out_files:
+        logging.info(f"[Consolidate] Generating global performance summary...")
+        path_stats_global = os.path.join(phase_dir, "stats_global.csv")
+        
+        # Fresh file for global summary
+        if os.path.exists(path_stats_global):
+            os.remove(path_stats_global)
+            
+        for of in sorted(out_files):
+            try:
+                # We use a fresh Stats object per file to generate individual global metrics
+                s = Stats(percentiles=[.5, .9])
+                s.load_multiple_csv([(of, {phase_name})])
+                
+                # --- Global Performance Entry ---
+                # We let Stats calculate the duration from timestamps
+                gs = s.global_stats(phase=phase_name)
+                
+                if not gs.empty:
+                    row = gs.iloc[0]
+                    duration = row.get("total_time", 0)
+                    
+                    if phase_name == "api-tx-build":
+                        save_global_performance_summary(
+                            path_stats_global,
+                            users=s.df["user_id"].nunique(),
+                            duration=duration,
+                            api_reqs=row.get("total_requests_api", 0),
+                            bc_reqs=row.get("total_requests_blockchain", 0),
+                            total_reqs=row.get("total_requests_api", 0) + row.get("total_requests_blockchain", 0),
+                            rps=row.get("rps_api", 0) + row.get("rps_blockchain", 0),
+                            phase=phase_name,
+                            api_success=row.get("success_api", 0),
+                            api_fail=row.get("fails_api", 0),
+                            bc_success=row.get("success_blockchain", 0),
+                            bc_fail=row.get("fails_blockchain", 0)
+                        )
+                    else: # api-read-only
+                        save_global_performance_summary(
+                            path_stats_global,
+                            users=s.df["user_id"].nunique(),
+                            duration=duration,
+                            api_reqs=row.get("total_requests_api", 0),
+                            bc_reqs=0,
+                            total_reqs=row.get("total_requests_api", 0),
+                            rps=row.get("rps_api", 0),
+                            phase=phase_name,
+                            api_success=row.get("success", 0),
+                            api_fail=row.get("fails", 0)
+                        )
+            except Exception as e:
+                logging.warning(f"Failed to process global metrics for {of}: {e}")
+                
+        logging.info(f"\t- Consolidated Global Stats saved  : {path_stats_global}")
+
 
