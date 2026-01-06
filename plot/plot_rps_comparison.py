@@ -37,15 +37,17 @@ def plot_rps_comparison(root_dir, output_dir):
         subset = subset.sort_values("users")
         
         # Plot
-        plt.plot(
+        plt.errorbar(
             subset["users"], 
             subset["rps"], 
+            yerr=subset.get("rps_std"), # Use std if available
             label=style["label"], 
             color=style["color"], 
             marker=style["marker"],
             linestyle='-', 
             linewidth=2,
-            markersize=8
+            markersize=8,
+            capsize=5
         )
         plotted_any = True
 
@@ -53,7 +55,7 @@ def plot_rps_comparison(root_dir, output_dir):
         logging.warning("No matching data found for RPS plot styles.")
         return
 
-    plt.xlabel("Users", fontsize=FONT_SIZE)
+    plt.xlabel("Quantidade de Usuários", fontsize=FONT_SIZE)
     plt.ylabel("Global RPS", fontsize=FONT_SIZE)
     plt.title("RPS Comparison by User Load", fontsize=FONT_SIZE_TITLE)
     plt.legend(fontsize=FONT_SIZE_LEGEND)

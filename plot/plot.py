@@ -11,6 +11,8 @@ from plot.plot_txbuild_stacked import create_txbuild_stacked_plot
 from plot.plot_txbuild_grouped import create_txbuild_grouped_plot
 from plot.plot_rps_comparison import plot_rps_comparison
 from plot.plot_success_fail import plot_success_fail
+from plot.plot_read_routes import plot_read_routes
+from plot.plot_tx_build_routes import plot_tx_build_routes
 
 def generate_plots(root_dir):
     """
@@ -49,6 +51,12 @@ def generate_plots(root_dir):
 
     # 5. Success/Fail Plot
     plot_success_fail(root_dir, root_dir)
+
+    # 6. Read Routes Plot
+    plot_read_routes(root_dir, root_dir)
+
+    # 7. Write Routes Plot (Tx-Build)
+    plot_tx_build_routes(root_dir, root_dir)
 
     logging.info(f"Plots genareted success in: {root_dir}")
 
