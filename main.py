@@ -46,53 +46,48 @@ def run_load_tester(
     interval_requests,
     step_users=None, 
     interval_users=None,
-    is_warmup=False,
+    repetition_index=None
 ):
-  
-    if is_warmup:
-        run_label = f"WARM-UP][{run.upper()}"
-        logging.info("-" * log.SIZE)
-        logging.info(f"[{run_label}] Starting users configuration...")
-        logging.info("")
+
+    run_label = run.upper()
+    
+    if run == "static":
+        run_directory_name = f"{contract}/mode-{mode}_duration-{duration}_users-{users}_interval-requests-{interval_requests}"
+    elif run == "ramp-up":
+        run_directory_name = f"{contract}/mode-{mode}_duration-{duration}_users-{users}_step_users-{step_users}_interval_users-{interval_users}_interval-requests-{interval_requests}"
     else:
-        run_label = run.upper()
-        
-        if run == "static":
-            run_directory_name = f"{contract}/mode-{mode}_duration-{duration}_users-{users}_interval-requests-{interval_requests}"
-        elif run == "ramp-up":
-            run_directory_name = f"{contract}/mode-{mode}_duration-{duration}_users-{users}_step_users-{step_users}_interval_users-{interval_users}_interval-requests-{interval_requests}"
-        else:
-            logging.error(f"Invalid run type: {run}")
-            return
+        logging.error(f"Invalid run type: {run}")
+        return
 
-        run_directory = save.create_directory(output_dir, run_directory_name)
-        output_file = f"{run_directory}/out.csv"
+    run_directory = save.create_directory(output_dir, run_directory_name)
 
-        args_file = save.save_run_args(
-            run_directory=run_directory,
-            host=host,
-            mode=mode,
-            contract=contract,
-            run=run,
-            duration=duration,
-            users=users,
-            step_users=step_users,
-            interval_users=interval_users,
-            interval_requests=interval_requests,
-        )
+    args_file = save.save_run_args(
+        run_directory=run_directory,
+        host=host,
+        mode=mode,
+        contract=contract,
+        run=run,
+        duration=duration,
+        users=users,
+        step_users=step_users,
+        interval_users=interval_users,
+        interval_requests=interval_requests,
+        repeat=repeat,
+    )
 
-        log.print_args_run(
-            host=host,
-            mode=mode, 
-            contract=contract, 
-            run=run, 
-            duration=duration,
-            users=users, 
-            step_users=step_users, 
-            interval_users=interval_users, 
-            interval_requests=interval_requests,
-            args_file=args_file,
-        )
+    log.print_args_run(
+        host=host,
+        mode=mode,
+        repeat=repeat,
+        contract=contract, 
+        run=run, 
+        duration=duration,
+        users=users, 
+        step_users=step_users, 
+        interval_users=interval_users, 
+        interval_requests=interval_requests,
+        args_file=args_file,
+    )
 
     if contract == "erc721":
         user_class = UserERC721  
@@ -102,10 +97,9 @@ def run_load_tester(
         logging.error(f"Invalid contract type: {contract}")
         return
 
-    if not is_warmup:
-        logging.info("-" * log.SIZE)
-        logging.info(f"[{run_label}] Starting users configuration (Run {current_run}/{total_runs_all})...")
-        logging.info("")
+    logging.info("-" * log.SIZE)
+    logging.info(f"[{run_label}] Starting users configuration (Run {current_run}/{total_runs})...")
+    logging.info("")
 
     tester = LoadTester(
         host=host,
@@ -119,43 +113,98 @@ def run_load_tester(
         interval_requests=interval_requests
     )
 
-    if is_warmup:
-        logging.info("")
-        logging.info(f"[{run_label}] Finished users configurations.")
-        logging.info("-" * log.SIZE)
-        logging.info(f"[{run_label}] Starting load test...")
-        logging.info("")
-    else:
-        logging.info("")
-        logging.info(f"[{run_label}] Finished users configurations (Run {current_run}/{total_runs_all}).")
-        logging.info("-" * log.SIZE)
-        logging.info(f"[{run_label}] Starting load test (Run {current_run}/{total_runs_all})...")
-        logging.info("")
-
-    if not is_warmup:
-        if run == "static":
-            execute_and_generate_stats(tester.run_static_load, "api-tx-build", run_directory)
-            execute_and_generate_stats(tester.run_static_load, "api-read-only", run_directory)
-        elif run == "ramp-up":
-            execute_and_generate_stats(tester.run_ramp_up_load, "api-tx-build", run_directory)
-            execute_and_generate_stats(tester.run_ramp_up_load, "api-read-only", run_directory)
-    else:
-         if run == "static":
-            tester.run_static_load(phase="api-tx-build")
-            tester.run_static_load(phase="api-read-only")
-         elif run == "ramp-up":
-            tester.run_ramp_up_load(phase="api-tx-build")
-            tester.run_ramp_up_load(phase="api-read-only")
-    
-    if is_warmup:
-        logging.info(f"[{run_label}] Finished load test.")
-    else:
-        logging.info(f"[{run_label}] Finished load test (Run {current_run}/{total_runs_all}).")
+    logging.info("")
+    logging.info(f"[{run_label}] Finished users configurations (Run {current_run}/{total_runs}).")
+    logging.info("-" * log.SIZE)
+    logging.info(f"[{run_label}] Starting load test (Run {current_run}/{total_runs})...")
     logging.info("")
 
+    if run == "static":
+        execute(
+            run=tester.run_static_load,
+            phase="api-tx-build", 
+            run_directory=run_directory, 
+            repetition_index=repetition_index
+        )
+        execute(
+            run=tester.run_static_load,
+            phase="api-read-only", 
+            run_directory=run_directory,
+            repetition_index=repetition_index
+        )
+    elif run == "ramp-up":
+        execute(
+            run=tester.run_ramp_up_load, 
+            phase="api-tx-build",
+            run_directory=run_directory,
+            repetition_index=repetition_index
+        )
+        execute(
+            run=tester.run_ramp_up_load,
+            phase="api-read-only",
+            run_directory=run_directory,
+            repetition_index=repetition_index
+        )
 
+    logging.info("")
+    logging.info(f"[{run_label}] Finished load test (Run {current_run}/{total_runs}).")
+    logging.info("=" * log.SIZE)
+    
+    return run_directory
 
+def run_warmup(
+    run, 
+    host,
+    contract,
+    mode,
+    duration,
+    users, 
+    interval_requests,
+    step_users=None, 
+    interval_users=None
+):
+    run_label = f"WARM-UP][{run.upper()}"
+    
+    if contract == "erc721":
+        user_class = UserERC721  
+    elif contract == "erc1155": 
+        user_class = UserERC1155
+    else:
+        logging.error(f"Invalid contract type: {contract}")
+        return
+    
+    logging.info(f"[{run_label}] Starting users configuration...")
+    logging.info("")
 
+    tester = LoadTester(
+        host=host,
+        mode=mode,
+        contract=contract,
+        duration=duration,
+        user_cls=user_class,
+        users=users,
+        step_users=step_users,
+        interval_users=interval_users,
+        interval_requests=interval_requests
+    )
+
+    logging.info("")
+    logging.info(f"[{run_label}] Finished users configurations.")
+    logging.info("-" * log.SIZE)
+    logging.info(f"[{run_label}] Starting load test...")
+    logging.info("")
+
+    if run == "static":
+        tester.run_static_load(phase="api-tx-build")
+        tester.run_static_load(phase="api-read-only")
+    elif run == "ramp-up":
+        tester.run_ramp_up_load(phase="api-tx-build")
+        tester.run_ramp_up_load(phase="api-read-only")
+    
+    logging.info("")
+    logging.info(f"[{run_label}] Finished load test.")
+    logging.info("=" * log.SIZE)
+    
 def pad_list(lst, target_len):
     if len(lst) == 1:
         return lst * target_len
@@ -254,24 +303,8 @@ def main():
         contract =  contracts_to_run[0]
         run = runs[0]
         
-        logging.info(f"[WARM-UP] Run...")
-
-        # log.print_args_run(
-        #     run_type=run_type,
-        #     contract=contract,
-        #     mode=args.mode,
-        #     duration=args.warmup_duration,
-        #     users=args.warmup_users,
-        #     interval_requests=args.warmup_interval_requests,
-        #     step_users=args.warmup_step_users if run_type == "ramp-up" else None,
-        #     interval_users=args.warmup_interval_users if run_type == "ramp-up" else None,
-        # )
-
-        run_load_tester(
+        run_warmup(
             run=run,
-            current_run=None,
-            total_runs_all=None,
-            output_dir=None,
             host=args.host,
             contract=contract,
             mode=args.mode,
@@ -280,7 +313,6 @@ def main():
             interval_requests=args.warmup_interval_requests,
             step_users=args.warmup_step_users if run == "ramp-up" else None,
             interval_users=args.warmup_interval_users if run == "ramp-up" else None,
-            is_warmup=True
         )
 
 
