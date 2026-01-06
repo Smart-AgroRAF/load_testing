@@ -79,10 +79,12 @@ def setup_logging(results_directory, verbosity):
 def print_global_run_plan_summary(
     host,
     mode, 
+    repeat,
     runs, 
     contracts, 
     combos, 
     interval_requests,
+    total_runs,
     total_runs_all
 ):
     logging.info("Global Run Plan Summary")
@@ -96,7 +98,9 @@ def print_global_run_plan_summary(
     logging.info(f"\t- Step Users          : {[s for (_, s, _, _) in combos]}")
     logging.info(f"\t- Interval Users(s)   : {[r for (_, _, r, _) in combos]}")
     logging.info(f"\t- Interval Request(s) : {interval_requests}")
-    logging.info(f"\t- Total runs          : {total_runs_all}")
+    logging.info(f"\t- Repeat              : {repeat}")
+    logging.info(f"\t- Total runs          : {total_runs}")
+    logging.info(f"\t- Total runs (all)    : {total_runs_all}")
     logging.info("-" * SIZE)
 
     run_number = 0
@@ -104,10 +108,11 @@ def print_global_run_plan_summary(
         for idx, (users, step_users, interval_users, duration) in enumerate(combos, start=1):
             for run_idx, run in enumerate(runs):
                 run_number += 1
-                logging.info(f"- Run {run_number}/{total_runs_all}:")
+                logging.info(f"- Run {run_number}/{total_runs}:")
                 print_args_run(
                     host=host,
                     mode=mode, 
+                    repeat=repeat,
                     contract=contract, 
                     run=run,
                     duration=duration,
@@ -116,13 +121,14 @@ def print_global_run_plan_summary(
                     interval_users=interval_users, 
                     interval_requests=interval_requests,
                 )
-                if not (run_number == total_runs_all):
+                if not (run_number == total_runs):
                     logging.info("")
     logging.info("=" * SIZE)
 
 def print_args_run(
     host,
     mode, 
+    repeat,
     contract, 
     run, 
     duration,
@@ -143,10 +149,10 @@ def print_args_run(
         logging.info(f"\t- Step Users          : {step_users}")
         logging.info(f"\t- Interval Users      : {interval_users}s")
     logging.info(f"\t- Interval Request    : {interval_requests}s")
+    logging.info(f"\t- Repeat              : {repeat}")
     if args_file:
         logging.info(f"\t- Saved run arguments : {args_file}")
         # logging.debug(f"\t- Saved run arguments : {json.dumps(args_data, indent=2)}")
-
 
 def print_end_summary(
     total_requests,

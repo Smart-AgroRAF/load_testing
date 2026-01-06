@@ -14,24 +14,29 @@ from users.user_erc1155 import UserERC1155
 from config import USERS, RESULTS_DIR, MODES, HOST, RUN_TIME, SPAWN_RATE
 from plot.plot import generate_plots
 
-def execute_and_generate_stats(run, phase_name, run_directory):
+def execute(run, phase, run_directory, repetition_index=None):
 
-    phase_dir = f"{run_directory}/{phase_name}"
+    phase_dir = f"{run_directory}/{phase}"
     os.makedirs(phase_dir, exist_ok=True)
     
-    output_file = f"{phase_dir}/out.csv"
+    # Determine output filename based on repetition
+    if repetition_index is not None:
+        filename = f"out_rep-{repetition_index + 1}.csv"
+    else:
+        filename = "out.csv"
+        
+    output_file = f"{phase_dir}/{filename}"
     
-    run_data = run(phase_name, output_file)
+    run_data = run(phase, output_file)
     
-    save.save_all_outputs(run_data, phase_name, output_file)
-
-    logging.info(f"Finished stats generation.\n")
+    save.save_all_outputs(run_data, phase, output_file)
 
 
 def run_load_tester(
     run,
     current_run,
-    total_runs_all,
+    total_runs,
+    repeat,
     output_dir, 
     host,
     contract,
@@ -179,6 +184,9 @@ def main():
     parser.add_argument("--step-users", type=int, nargs="+", default=[1], help="Número de usuários adicionados a cada incremento (ramp-up)")
     parser.add_argument("--interval-users", type=float, nargs="+", default=[1.0], help="Tempo entre incrementos de usuários (em segundos)")
     parser.add_argument("--interval-requests", type=float, default=1.0, help="Pausa entre requisições consecutivas (em segundos)")
+    
+    # Repetition
+    parser.add_argument("--repeat", type=int, default=1, help="Número de vezes para repetir cada configuração de execução (default: 1)")
 
     # Warm-up
     parser.add_argument("--warmup-users", type=int, default=1, help="Usuários no warm-up (default=1)")
@@ -225,16 +233,19 @@ def main():
     runs = ["static", "ramp-up"] if args.run == "both" else [args.run]
 
 
-    total_runs_all = len(combos) * len(runs) * len(contracts_to_run)
+    total_runs = len(combos) * len(runs) * len(contracts_to_run)
+    total_runs_all = total_runs * args.repeat
 
 
     log.print_global_run_plan_summary(
         host=args.host,
-        mode=args.mode, 
-        runs=runs, 
-        contracts=contracts_to_run, 
-        combos=combos, 
+        mode=args.mode,
+        repeat=args.repeat,
+        runs=runs,
+        contracts=contracts_to_run,
+        combos=combos,
         interval_requests=args.interval_requests,
+        total_runs=total_runs,
         total_runs_all=total_runs_all
     )
 
@@ -279,22 +290,31 @@ def main():
         for idx, (users, step_users, interval_users, duration) in enumerate(combos, start=1):
             for run in runs:
                 current_run += 1
-                logging.info(f"Run {current_run}/{total_runs_all}")
-                
-                run_load_tester(
-                    run=run,
-                    current_run=current_run,
-                    total_runs_all=total_runs_all,
-                    output_dir=results_directory,
-                    host=args.host,
-                    contract=contract,
-                    mode=args.mode,
-                    duration=duration,
-                    users=users,
-                    interval_requests=args.interval_requests,
-                    step_users=step_users if run == "ramp-up" else None,
-                    interval_users=interval_users if run == "ramp-up" else None,
-                )
+                run_dir = None
+                for rep in range(0, args.repeat):
+                    logging.info(f"Run {current_run}/{total_runs} (Repetition {rep+1}/{args.repeat})")
+                    
+                    run_dir = run_load_tester(
+                        run=run,
+                        current_run=current_run,
+                        total_runs=total_runs,
+                        repeat=args.repeat,
+                        output_dir=results_directory,
+                        host=args.host,
+                        contract=contract,
+                        mode=args.mode,
+                        duration=duration,
+                        users=users,
+                        interval_requests=args.interval_requests,
+                        step_users=step_users if run == "ramp-up" else None,
+                        interval_users=interval_users if run == "ramp-up" else None,
+                        repetition_index=rep
+                    )
+
+                # After all repetitions for this config, consolidate stats
+                if run_dir:
+                    save.consolidate_stats(run_dir, "api-tx-build")
+                    save.consolidate_stats(run_dir, "api-read-only")
 
     # Generate analysis plots
     try:

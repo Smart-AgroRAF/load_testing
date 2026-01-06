@@ -30,7 +30,7 @@ def create_directory(current_directory, child_directory):
     return directory
 
 
-def save_run_args(run_directory, host, mode, contract, run, duration, users, step_users, interval_users, interval_requests):
+def save_run_args(run_directory, host, mode, contract, run, duration, users, step_users, interval_users, interval_requests, repeat):
     """
     Save run configuration parameters into a JSON file.
 
@@ -49,6 +49,7 @@ def save_run_args(run_directory, host, mode, contract, run, duration, users, ste
         "step-users": step_users,
         "interval-users": interval_users,
         "interval-requests": interval_requests,
+        "repeat": repeat,
     }
 
     with open(args_file, "w") as f:
