@@ -26,7 +26,6 @@ class TaskAPI:
                 url=url,
                 json=payload,
                 headers={"Content-Type": "application/json"},
-                # timeout=aiohttp.ClientTimeout(total=TIMEOUT_API)
                 timeout=TIMEOUT_API
             ) as response:
             
@@ -48,10 +47,10 @@ class TaskAPI:
                     f" {status}"
                 )
 
-                if task_type == "API-READ-ONLY":
-                    log_msg += f" Body: {transaction}"
+                # if task_type == "API-READ-ONLY":
+                #     log_msg += f" Body: {transaction}"
 
-                logging.info(log_msg)
+                logging.debug(log_msg)
 
                 return {
                     "timestamp": timestamp,

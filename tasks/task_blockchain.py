@@ -31,7 +31,7 @@ class TaskBlockchain:
         
         duration = time.perf_counter() - start_time
 
-        logging.info(
+        logging.debug(
             f"[User-{self.user_id:03d}]"
             f" {f'[REQ-BLOCK-{request_id:03d}]':<15}"
             f" {f'[TX-BUILD]':<15}"
@@ -60,7 +60,7 @@ class TaskBlockchain:
         signed_tx = self.wallet.sign_transaction(tx)
         duration = (time.perf_counter() - start_time)
         
-        logging.info(
+        logging.debug(
             f"[User-{self.user_id:03d}]"
             f" {f'[REQ-BLOCK-{request_id:03d}]':<15}"
             f" {f'[TX-SIGN]':<15}"
@@ -94,7 +94,7 @@ class TaskBlockchain:
 
         status = "success" if receipt and receipt.status == 1 else "fail"
 
-        logging.info(
+        logging.debug(
             f"[User-{self.user_id:03d}]"
             f" [REQ-BLOCK-{request_id:03d}]"
             f" {f'[TX-SEND]':<15}"
@@ -139,7 +139,7 @@ class TaskBlockchain:
         # TX-BLOCKCHAIN Total
         duration = (time.perf_counter() - start_time)
         
-        logging.info(
+        logging.debug(
             f"[User-{self.user_id:03d}]"
             f" {f'[REQ-BLOCK-{request_id:03d}]':<15}"
             f" {f'[TX-BLOCK]':<15}"
