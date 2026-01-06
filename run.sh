@@ -8,4 +8,5 @@ python main.py \
 	--run static \
 	--contract both \
 	--interval-requests 1 \
+	--repeat 10 \
 	--warmup-duration 20
