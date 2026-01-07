@@ -12,9 +12,23 @@ MODES = ["api-only", "api-blockchain"]
 # HOST = "http://localhost:3000"
 # HOST = "http://31.97.30.104:4000"
 HOST = os.getenv("API_URL", "http://localhost:3000")
-RUN_TIME = 10
-USERS = 12
-SPAWN_RATE = 2
+
+TYPE = ["cartesian", "paired"]
+CONTRACT = ["erc721", "erc1155", "both"]
+RUN = ["static", "ramp-up", "both"]
+
+DURATION = [10]
+USERS = [10]
+STEP_USERS = [1]
+INTERVAL_USERS = [1]
+INTERVAL_REQUEST = 1
+REPEAT = 1
+
+WARMUP_USERS = 10
+WARMUP_DURATION = 10
+WARMUP_STEP_USERS = 1
+WARMUP_INTERVAL_USERS = 1
+WARMUP_INTERVAL_REQUESTS = 1
 
 # Wallets
 # MNEMONIC = os.getenv("MNEMONIC")
