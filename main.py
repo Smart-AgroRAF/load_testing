@@ -11,7 +11,25 @@ from stats import Stats
 from load_tester import LoadTester
 from users.user_erc721 import UserERC721
 from users.user_erc1155 import UserERC1155
-from config import USERS, RESULTS_DIR, MODES, HOST, RUN_TIME, SPAWN_RATE
+from config import (
+    TYPE,
+    CONTRACT,
+    RUN,
+    USERS, 
+    RESULTS_DIR, 
+    MODES, 
+    HOST, 
+    DURATION, 
+    STEP_USERS, 
+    INTERVAL_USERS, 
+    INTERVAL_REQUEST, 
+    REPEAT,
+    WARMUP_USERS,
+    WARMUP_DURATION,
+    WARMUP_STEP_USERS,
+    WARMUP_INTERVAL_USERS,
+    WARMUP_INTERVAL_REQUESTS,
+)
 from plot.plot import generate_plots
 
 def execute(run, phase, run_directory, repetition_index=None):
@@ -219,30 +237,30 @@ def main():
     parser.add_argument("--plot", type=str, help="Gera gráficos a partir dos arquivos CSV de resultados existentes (caminho do diretório).")
 
     # Configuration arguments
-    parser.add_argument("--mode", type=str, default=MODES[0], choices=MODES, help=f"Modo de execução (default: {MODES[0]})")
-    parser.add_argument("--type", choices=["cartesian", "paired"], default="paired", help="Define o modo de combinação dos parâmetros.")
-    parser.add_argument("--contract", choices=["erc721", "erc1155", "both"], default="both", help="Padrão de contrato (default: both)")
-    parser.add_argument("--run", choices=["static", "ramp-up", "both"], default="both", help="Tipo de execução (default: both)")
+    parser.add_argument("--mode", type=str, choices=MODES, default=MODES[0], help=f"Modo de execução (default: {MODES[0]})")
+    parser.add_argument("--type", choices=TYPE, default=TYPE[1], help=f"Define o modo de combinação dos parâmetros (default: {TYPE[1]})")
+    parser.add_argument("--contract", choices=CONTRACT, default=CONTRACT[2], help=f"Padrão de contrato (default: {CONTRACT[2]})")
+    parser.add_argument("--run", choices=RUN, default=RUN[2], help=f"Tipo de execução (default: {RUN[2]})")
     parser.add_argument("--host", default=HOST, help=f"Host alvo (default: {HOST})")
     # parser.add_argument("--tx-build-weight", default=TX_BUILD_WEIGHT, help=f"Peso das rotas (default: {TX_BUILD_WEIGHT})")
     # parser.add_argument("--read-only-weight", default=READ_ONLY_WEIGHT, help=f"Peso das rotas (default: {READ_ONLY_WEIGHT})")
 
     # Main arguments
-    parser.add_argument("--duration", type=float, nargs="+", default=[RUN_TIME], help=f"Duração do teste (default: {RUN_TIME})") 
-    parser.add_argument("--users", type=int, nargs="+", default=[USERS], help=f"Número de usuários simultâneos (default: {USERS})")
-    parser.add_argument("--step-users", type=int, nargs="+", default=[1], help="Número de usuários adicionados a cada incremento (ramp-up)")
-    parser.add_argument("--interval-users", type=float, nargs="+", default=[1.0], help="Tempo entre incrementos de usuários (em segundos)")
-    parser.add_argument("--interval-requests", type=float, default=1.0, help="Pausa entre requisições consecutivas (em segundos)")
+    parser.add_argument("--duration", type=float, nargs="+", default=DURATION, help=f"Duração do teste (segundos) (default: {DURATION})") 
+    parser.add_argument("--users", type=int, nargs="+", default=USERS, help=f"Número de usuários simultâneos (default: {USERS})")
+    parser.add_argument("--step-users", type=int, nargs="+", default=STEP_USERS, help=f"Número de usuários adicionados a cada incremento (apenas no ramp-up) (default: {STEP_USERS})")
+    parser.add_argument("--interval-users", type=float, nargs="+", default=INTERVAL_USERS, help=f"Tempo entre incrementos de usuários (segundos) (apenas no ramp-up) (default: {INTERVAL_USERS})")
+    parser.add_argument("--interval-requests", type=float, default=INTERVAL_REQUEST, help=f"Pausa entre requisições consecutivas (segundos) (default: {INTERVAL_REQUEST})")
     
     # Repetition
-    parser.add_argument("--repeat", type=int, default=1, help="Número de vezes para repetir cada configuração de execução (default: 1)")
+    parser.add_argument("--repeat", type=int, default=REPEAT, help=f"Número de vezes para repetir cada configuração de execução (default: {REPEAT})")
 
     # Warm-up
-    parser.add_argument("--warmup-users", type=int, default=1, help="Usuários no warm-up (default=1)")
-    parser.add_argument("--warmup-duration", type=float, default=0, help="Duração do warm-up (default=15s)")
-    parser.add_argument("--warmup-step-users", type=int, default=1, help="Incremento de usuários no warm-up (default=1)")
-    parser.add_argument("--warmup-interval-users", type=float, default=1.0, help="Tempo entre incrementos no warm-up (default=1.0s)")
-    parser.add_argument("--warmup-interval-requests", type=float, default=1.0, help="Pausa entre requisições no warm-up (default=1.0s)")
+    parser.add_argument("--warmup-duration", type=float, default=WARMUP_DURATION, help=f"Duração do warm-up (default: {WARMUP_DURATION})")
+    parser.add_argument("--warmup-users", type=int, default=WARMUP_USERS, help=f"Usuários no warm-up (default: {WARMUP_USERS})")    
+    parser.add_argument("--warmup-step-users", type=int, default=WARMUP_STEP_USERS, help=f"Incremento de usuários no warm-up (default: {WARMUP_STEP_USERS})")
+    parser.add_argument("--warmup-interval-users", type=float, default=WARMUP_INTERVAL_USERS, help=f"Tempo entre incrementos no warm-up (segundos) (default: {WARMUP_INTERVAL_USERS})")
+    parser.add_argument("--warmup-interval-requests", type=float, default=WARMUP_INTERVAL_REQUESTS, help=f"Pausa entre requisições no warm-up (segundos) (default: {WARMUP_INTERVAL_REQUESTS})")
 
     args = parser.parse_args()
 
