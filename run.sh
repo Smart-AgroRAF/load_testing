@@ -10,4 +10,5 @@ python main.py \
 	--interval-requests 1 \
 	--repeat 10 \
 	--warmup-users 10 \
-	--warmup-duration 100
+	--warmup-duration 100 \
+	--warmup-interval-requests 1
