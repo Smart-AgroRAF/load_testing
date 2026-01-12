@@ -4,6 +4,7 @@ import random
 import logging
 import asyncio
 import aiohttp
+import uuid
 from functools import partial
 
 # Internal imports
@@ -41,6 +42,7 @@ class User:
 
         self.sequence_step = 0
         self.last_token_id = None
+        self.batch_id = f"LOTE-{uuid.uuid4()}"
 
         # Session will be initialized in run_... methods or passed in
         self.session = None
@@ -67,7 +69,8 @@ class User:
                 campaigns_dict[(self.contract, task_type)] = campaigns.build_campaign(
                     contract=self.contract,
                     task_type="API-READ-ONLY",
-                    address=self.wallet.address
+                    address=self.wallet.address,
+                    batch_id=self.batch_id
                 )
 
         return campaigns_dict
@@ -85,6 +88,7 @@ class User:
                 campaign_requests = campaigns.build_campaign_sequential(
                     contract=self.contract,
                     address=self.wallet.address,
+                    batch_id=self.batch_id,
                     n_split_batch_tx=random.choice(range(1, 5)),
                     n_add_status_tx=random.choice(range(1, 5))
                 )
