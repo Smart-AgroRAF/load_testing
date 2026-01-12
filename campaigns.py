@@ -6,7 +6,7 @@ payload_mint_root_batch = {
     "productName": "Tomate",
     "productExpeditionDate": "2025-06-11",
     "productType": "Tomate BRS Zamir",
-    "batchId": "LOTE-01",
+    "batchId": "<BATCH_ID>",
     "unitOfMeasure": "kg",
     "batchQuantity": 1000000,
 }
@@ -40,7 +40,7 @@ payload_get_users_batches = {
 }
 
 payload_get_tokens_by_batch_id = {
-    "batchId": "LOTE-01",
+    "batchId": "<BATCH_ID>",
 }
 
 payload_get_batch_products = {
@@ -96,22 +96,22 @@ CAMPAIGNS = {
     # "mixed_full": erc721_tx_build + erc721_read_only + erc1155_tx_build + erc1155_read_only,
 }
 
-def _replace_placeholders(obj, address: str):
+def _replace_placeholders(obj, address: str, batch_id: str):
     """
-    Substitui recursivamente <FROM> e <TO> em qualquer estrutura (dict, list, str).
+    Substitui recursivamente <FROM>, <TO> e <BATCH_ID> em qualquer estrutura (dict, list, str).
     """
     if isinstance(obj, dict):
-        return {k: _replace_placeholders(v, address) for k, v in obj.items()}
+        return {k: _replace_placeholders(v, address, batch_id) for k, v in obj.items()}
     elif isinstance(obj, list):
-        return [_replace_placeholders(v, address) for v in obj]
+        return [_replace_placeholders(v, address, batch_id) for v in obj]
     elif isinstance(obj, str):
-        return obj.replace("<FROM>", address).replace("<TO>", address)
+        return obj.replace("<FROM>", address).replace("<TO>", address).replace("<BATCH_ID>", batch_id)
     return obj
 
 
-def build_campaign(contract: str, task_type: str, address: str):   
+def build_campaign(contract: str, task_type: str, address: str, batch_id: str):   
     """
-    Constrói uma campanha substituindo <FROM> e <TO> pelos endereços reais.
+    Constrói uma campanha substituindo <FROM>, <TO> e <BATCH_ID> pelos valores reais.
     Retorna uma lista de (endpoint, payload).
     """
         
@@ -122,7 +122,7 @@ def build_campaign(contract: str, task_type: str, address: str):
     final_campaign = []
     for endpoint, payload in CAMPAIGNS[campaign_key]:
         payload_copy = copy.deepcopy(payload)
-        replaced = _replace_placeholders(payload_copy, address)
+        replaced = _replace_placeholders(payload_copy, address, batch_id)
         final_campaign.append((endpoint, replaced))
 
     return final_campaign
@@ -131,6 +131,7 @@ def build_campaign(contract: str, task_type: str, address: str):
 def build_campaign_sequential(
     contract: str,
     address: str,
+    batch_id: str,
     n_split_batch_tx: int = None,
     n_set_product_is_active_tx: int = None,
     n_add_status_tx: int = None
@@ -149,6 +150,8 @@ def build_campaign_sequential(
         Either "ERC-721" or "ERC-1155".
     address : str
         Address used to replace <FROM> and <TO> placeholders.
+    batch_id : str
+        Batch ID used to replace <BATCH_ID> placeholders.
     n_split_batch_tx : int
         Number of repeated splitBatchTx calls.
     n_set_product_is_active_tx : int
@@ -184,28 +187,28 @@ def build_campaign_sequential(
 
     # 1. mintRootBatchTx (always once)
     endpoint, payload = mint_tpl
-    replaced = _replace_placeholders(copy.deepcopy(payload), address)
+    replaced = _replace_placeholders(copy.deepcopy(payload), address, batch_id)
     campaign.append((endpoint, replaced))
 
     # 2. splitBatchTx (n times)
     if n_split_batch_tx:
         for _ in range(n_split_batch_tx):
             endpoint, payload = split_tpl
-            replaced = _replace_placeholders(copy.deepcopy(payload), address)
+            replaced = _replace_placeholders(copy.deepcopy(payload), address, batch_id)
             campaign.append((endpoint, replaced))
 
     # 3. setProductIsActiveTx (n times)
     if n_set_product_is_active_tx:
         for _ in range(n_set_product_is_active_tx):
             endpoint, payload = active_tpl
-            replaced = _replace_placeholders(copy.deepcopy(payload), address)
+            replaced = _replace_placeholders(copy.deepcopy(payload), address, batch_id)
             campaign.append((endpoint, replaced))
 
     # 4. addStatusTx (n times)
     if n_add_status_tx:
         for _ in range(n_add_status_tx):
             endpoint, payload = status_tpl
-            replaced = _replace_placeholders(copy.deepcopy(payload), address)
+            replaced = _replace_placeholders(copy.deepcopy(payload), address, batch_id)
             campaign.append((endpoint, replaced))
 
     return campaign
