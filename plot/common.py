@@ -341,7 +341,7 @@ def scan_stats_endpoint_files(root_dir, phase_filter="api-read-only"):
                     
                     # Check experiment type
                     exp_type = os.path.basename(root)
-                    if exp_type != phase_filter:
+                    if phase_filter and exp_type != phase_filter:
                         continue
 
                     users = convert_users_to_int(args_run.get('users', 0))
@@ -367,7 +367,9 @@ def scan_stats_endpoint_files(root_dir, phase_filter="api-read-only"):
                             "total_success_std": row.get('success_std', float('nan')),
                             "total_fail": row.get('fail_count'),
                             "total_fail_std": row.get('fail_std', float('nan')),
-                            "mean_duration": row.get('mean')
+                            "mean_duration": row.get('mean'),
+                            "duration_std": row.get('mean_std', float('nan')),
+                            "phase": exp_type
                         })
 
                 except Exception as e:

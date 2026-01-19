@@ -157,6 +157,7 @@ def create_txbuild_stacked_plot(root_dir, output_dir):
                    color=task_colors.get(task, '#333333'), edgecolor='white', linewidth=0.5)
             bottoms += task_values
 
+    ax.set_title('Detalhamento de Latência por Etapa', fontsize=FONT_SIZE_TITLE)
     ax.set_xlabel('Quantidade de Usuários')
     ax.set_ylabel('Latência (s)')
     # ax.set_title('(a) Ambiente de testes', fontsize=FONT_SIZE_TITLE)
@@ -164,7 +165,7 @@ def create_txbuild_stacked_plot(root_dir, output_dir):
     ax.set_xticklabels(all_users)
     ax.set_ylim(bottom=0)
     
-    # Legend Logic from original
+    # Legend Logic
     operation_legend = [
         Patch(facecolor='#f5f5f5', edgecolor='black', label='API'),
         Patch(facecolor='#d9d9d9', edgecolor='black', label='QUEUE'),
@@ -172,16 +173,22 @@ def create_txbuild_stacked_plot(root_dir, output_dir):
         Patch(facecolor='#636363', edgecolor='black', label='SIGN'),
         Patch(facecolor='#252525', edgecolor='black', label='SEND'),
     ]
-    ax.legend(handles=operation_legend, fontsize=FONT_SIZE_LEGEND, loc='upper left')
-    ax.grid(True, axis='y', alpha=0.3)
     
     erc_legend = [
         Patch(facecolor='#4caf50', edgecolor='white', label='ERC1155'),
         Patch(facecolor='#ff9800', edgecolor='white', label='ERC721')
     ]
+
+    # Combined Legend Outside
+    combined_legend = operation_legend + [Patch(facecolor='white', alpha=0, label='')] + erc_legend
+    ax.legend(handles=combined_legend, fontsize=FONT_SIZE_LEGEND, 
+              loc='upper left', bbox_to_anchor=(1.02, 1), borderaxespad=0.)
+    
+    ax.grid(True, axis='y', alpha=0.3)
+    
     ax2 = ax.twinx()
     ax2.set_yticks([])
-    ax2.legend(handles=erc_legend, fontsize=FONT_SIZE_LEGEND, loc='upper right')
+    # ax2.legend(handles=erc_legend, fontsize=FONT_SIZE_LEGEND, loc='upper right')
     
     plt.xlim(-0.5, len(all_users) - 0.5 + bar_width*1.5)
     plt.tight_layout()
