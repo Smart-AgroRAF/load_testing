@@ -4,16 +4,16 @@ import matplotlib.pyplot as plt
 import logging
 from plot.common import log_plot_creation, FIG_SIZE, FONT_SIZE, FONT_SIZE_TITLE, FONT_SIZE_LEGEND, scan_stats_endpoint_files
 
-def plot_read_routes(root_dir, output_dir):
+def plot_read_latency(root_dir, output_dir):
     """
     Generates:
-    1. Separate line charts for each read-only endpoint (individual files).
-    2. Consolidated subplot images separated by contract (ERC721 and ERC1155).
+    1. Separate line charts for each read-only endpoint latency (individual files).
+    2. Consolidated latency subplot images separated by contract (ERC721 and ERC1155).
     """
     df = scan_stats_endpoint_files(root_dir, phase_filter="api-read-only")
     
     if df.empty:
-        logging.warning("No data found for read routes plot.")
+        logging.warning("No data found for read routes latency plot.")
         return
 
     # Check/Create output directory
@@ -22,8 +22,8 @@ def plot_read_routes(root_dir, output_dir):
     endpoints = sorted(df["endpoint"].unique())
     
     # Calculate global max for Y-axis scaling (including error bars)
-    max_val = (df["total_requests"] + df["total_requests_std"].fillna(0)).max()
-    margin = max_val * 0.1 if max_val > 0 else 1
+    max_val = (df["mean_duration"] + df["duration_std"].fillna(0)).max()
+    margin = max_val * 0.1 if max_val > 0 else 0.1
     y_max_limit = max_val + margin
     y_min_limit = 0 - margin
 
@@ -31,17 +31,7 @@ def plot_read_routes(root_dir, output_dir):
     # 1. Generate INDIVIDUAL plots for each endpoint
     # ---------------------------------------------------------
     
-    metric_colors = {
-        "Total": "blue",
-        "Success": "green",
-        "Fail": "red"
-    }
-    
-    steps_styles = {
-        "Total": {"linestyle": "-", "marker": "o"},
-        "Success": {"linestyle": "--", "marker": "^"},
-        "Fail": {"linestyle": ":", "marker": "x"}
-    }
+    style = {"linestyle": "-", "marker": "o", "color": "blue"}
 
     for endpoint in endpoints:
         subset = df[df["endpoint"] == endpoint].sort_values("users")
@@ -54,33 +44,25 @@ def plot_read_routes(root_dir, output_dir):
         plt.figure(figsize=FIG_SIZE)
         
         plt.errorbar(
-            subset["users"], subset["total_requests"], yerr=subset["total_requests_std"],
-            label="Total", color=metric_colors["Total"], capsize=5, **steps_styles["Total"]
-        )
-        plt.errorbar(
-            subset["users"], subset["total_success"], yerr=subset["total_success_std"],
-            label="Success", color=metric_colors["Success"], capsize=5, **steps_styles["Success"]
-        )
-        plt.errorbar(
-            subset["users"], subset["total_fail"], yerr=subset["total_fail_std"],
-            label="Fail", color=metric_colors["Fail"], capsize=5, **steps_styles["Fail"]
+            subset["users"], subset["mean_duration"], yerr=subset["duration_std"],
+            label="Latência Média", capsize=5, **style
         )
         
         contract_name = subset["contract"].iloc[0].upper() if not subset.empty else ""
         plt.suptitle(f"Rota de Leitura - {contract_name}", fontsize=FONT_SIZE_TITLE)
         plt.title(endpoint, fontsize=FONT_SIZE_TITLE - 6)
         plt.xlabel("Quantidade de Usuários", fontsize=FONT_SIZE)
-        plt.ylabel("Quantidade de Requisições", fontsize=FONT_SIZE)
+        plt.ylabel("Latência (s)", fontsize=FONT_SIZE)
         plt.ylim(y_min_limit, y_max_limit)
         
         all_users = sorted(subset["users"].unique())
         plt.xticks(all_users)
         
         plt.grid(True, linestyle='--', alpha=0.7)
-        plt.legend(fontsize=FONT_SIZE_LEGEND)
+        # plt.legend(fontsize=FONT_SIZE_LEGEND)
         plt.tight_layout(rect=[0, 0, 1, 0.95])
         
-        filename = f"plot_read_route_{safe_name}.png"
+        filename = f"plot_read_latency_route_{safe_name}.png"
         filepath = os.path.join(output_dir, filename)
         plt.savefig(filepath)
         plt.close()
@@ -94,15 +76,8 @@ def plot_read_routes(root_dir, output_dir):
     contracts = ["erc721", "erc1155"]
     
     for contract in contracts:
-        # Filter endpoints that belong to this contract
-        # We can check specific contract column or use endpoint string
-        # scan_endpoint_stats returns "contract" column if found in args_run.json
-        # but aggregated by endpoint.
-        
-        # If "contract" column is present and valid:
         subset_df = df[df["contract"].str.lower() == contract]
         
-        # Fallback: filter by endpoint name if contract column is mixed or missing
         if subset_df.empty:
              subset_df = df[df["endpoint"].str.contains(contract, case=False)]
 
@@ -127,13 +102,6 @@ def plot_read_routes(root_dir, output_dir):
         else:
             axes = axes.flatten()
             
-        # Common subplot styles - reusing steps_styles but adding colors directly
-        subplot_styles = {
-            "Total": {"linestyle": "-", "marker": "o", "color": "blue"},
-            "Success": {"linestyle": "--", "marker": "^", "color": "green"},
-            "Fail": {"linestyle": ":", "marker": "x", "color": "red"}
-        }
-
         for i, endpoint in enumerate(contract_endpoints):
             ax = axes[i]
             ep_data = subset_df[subset_df["endpoint"] == endpoint].sort_values("users")
@@ -141,16 +109,14 @@ def plot_read_routes(root_dir, output_dir):
             if ep_data.empty:
                 continue
                 
-            ax.errorbar(ep_data["users"], ep_data["total_requests"], yerr=ep_data["total_requests_std"], label="Total", capsize=3, **subplot_styles["Total"])
-            ax.errorbar(ep_data["users"], ep_data["total_success"], yerr=ep_data["total_success_std"], label="Success", capsize=3, **subplot_styles["Success"])
-            ax.errorbar(ep_data["users"], ep_data["total_fail"], yerr=ep_data["total_fail_std"], label="Fail", capsize=3, **subplot_styles["Fail"])
+            ax.errorbar(ep_data["users"], ep_data["mean_duration"], yerr=ep_data["duration_std"], label="Latência Média", capsize=3, **style)
             
             ax.set_title(endpoint, fontsize=FONT_SIZE_TITLE - 4)
             ax.set_xlabel("Quantidade de Usuários", fontsize=FONT_SIZE - 2)
-            ax.set_ylabel("Quantidade de Requisições", fontsize=FONT_SIZE - 2)
+            ax.set_ylabel("Latência (s)", fontsize=FONT_SIZE - 2)
             ax.set_ylim(y_min_limit, y_max_limit)
             ax.grid(True, linestyle='--', alpha=0.7)
-            ax.legend(fontsize=FONT_SIZE_LEGEND - 2)
+            # ax.legend(fontsize=FONT_SIZE_LEGEND - 2)
             
             all_users = sorted(ep_data["users"].unique())
             ax.set_xticks(all_users)
@@ -159,10 +125,10 @@ def plot_read_routes(root_dir, output_dir):
         for j in range(i + 1, len(axes)):
             fig.delaxes(axes[j])
 
-        plt.suptitle(f"Rotas de Leitura - {contract.upper()}", fontsize=FONT_SIZE_TITLE, y=1.02)
+        plt.suptitle(f"Latência das Rotas de Leitura - {contract.upper()}", fontsize=FONT_SIZE_TITLE, y=1.02)
         plt.tight_layout()
         
-        filename = f"plot_read_routes_{contract}_all.png"
+        filename = f"plot_read_latency_{contract}_all.png"
         filepath = os.path.join(output_dir, filename)
         plt.savefig(filepath, bbox_inches="tight")
         plt.close()
@@ -171,16 +137,11 @@ def plot_read_routes(root_dir, output_dir):
 
     # ---------------------------------------------------------
     # 3. Generate CONSOLIDATED plot for ALL endpoints (Combined)
-    #    Column 0: ERC721, Column 1: ERC1155
     # ---------------------------------------------------------
     
-    # Separate endpoints by contract type
     erc721_eps = []
     erc1155_eps = []
     
-    # Heuristic: verify if "erc721" or "erc1155" is in the endpoint string
-    # or rely on the dataframe 'contract' column if consistent.
-    # We'll use the unique endpoints list and classify them.
     all_endpoints = sorted(df["endpoint"].unique())
     
     for ep in all_endpoints:
@@ -189,66 +150,50 @@ def plot_read_routes(root_dir, output_dir):
         elif "erc1155" in ep.lower():
             erc1155_eps.append(ep)
     
-    # Sort them to likely align similar functions if they share suffixes
     erc721_eps.sort()
     erc1155_eps.sort()
     
-    # Determine grid size
     num_rows = max(len(erc721_eps), len(erc1155_eps))
     
     if num_rows > 0:
         figsize = (16, 5 * num_rows)
-        # Always 2 columns
         fig, axes = plt.subplots(num_rows, 2, figsize=figsize, sharex=False, sharey=False)
         
-        # Ensure axes is 2D array even if num_rows=1
         if num_rows == 1:
             axes = axes.reshape(1, 2)
 
-        # Plot ERC721 (Left Column, index 0)
+        # Plot ERC721
         for i, endpoint in enumerate(erc721_eps):
             ax = axes[i, 0]
             ep_data = df[df["endpoint"] == endpoint].sort_values("users")
             
             if not ep_data.empty:
-                ax.errorbar(ep_data["users"], ep_data["total_requests"], yerr=ep_data["total_requests_std"], label="Total", capsize=3, **subplot_styles["Total"])
-                ax.errorbar(ep_data["users"], ep_data["total_success"], yerr=ep_data["total_success_std"], label="Success", capsize=3, **subplot_styles["Success"])
-                ax.errorbar(ep_data["users"], ep_data["total_fail"], yerr=ep_data["total_fail_std"], label="Fail", capsize=3, **subplot_styles["Fail"])
-                
+                ax.errorbar(ep_data["users"], ep_data["mean_duration"], yerr=ep_data["duration_std"], label="Latência Média", capsize=3, **style)
                 ax.set_title(endpoint, fontsize=FONT_SIZE_TITLE - 4)
                 ax.set_xlabel("Quantidade de Usuários", fontsize=FONT_SIZE - 2)
-                ax.set_ylabel("Quantidade de Requisições", fontsize=FONT_SIZE - 2)
+                ax.set_ylabel("Latência (s)", fontsize=FONT_SIZE - 2)
                 ax.set_ylim(y_min_limit, y_max_limit)
                 ax.grid(True, linestyle='--', alpha=0.7)
-                ax.legend(fontsize=FONT_SIZE_LEGEND - 2)
-                
+                # ax.legend(fontsize=FONT_SIZE_LEGEND - 2)
                 all_users = sorted(ep_data["users"].unique())
                 ax.set_xticks(all_users)
         
-        # Plot ERC1155 (Right Column, index 1)
+        # Plot ERC1155
         for i, endpoint in enumerate(erc1155_eps):
             ax = axes[i, 1]
             ep_data = df[df["endpoint"] == endpoint].sort_values("users")
             
             if not ep_data.empty:
-                ax.errorbar(ep_data["users"], ep_data["total_requests"], yerr=ep_data["total_requests_std"], label="Total", capsize=3, **subplot_styles["Total"])
-                ax.errorbar(ep_data["users"], ep_data["total_success"], yerr=ep_data["total_success_std"], label="Success", capsize=3, **subplot_styles["Success"])
-                ax.errorbar(ep_data["users"], ep_data["total_fail"], yerr=ep_data["total_fail_std"], label="Fail", capsize=3, **subplot_styles["Fail"])
-                
+                ax.errorbar(ep_data["users"], ep_data["mean_duration"], yerr=ep_data["duration_std"], label="Latência Média", capsize=3, **style)
                 ax.set_title(endpoint, fontsize=FONT_SIZE_TITLE - 4)
                 ax.set_xlabel("Quantidade de Usuários", fontsize=FONT_SIZE - 2)
-                ax.set_ylabel("Quantidade de Requisições", fontsize=FONT_SIZE - 2)
+                ax.set_ylabel("Latência (s)", fontsize=FONT_SIZE - 2)
                 ax.set_ylim(y_min_limit, y_max_limit)
                 ax.grid(True, linestyle='--', alpha=0.7)
-                ax.legend(fontsize=FONT_SIZE_LEGEND - 2)
-                
+                # ax.legend(fontsize=FONT_SIZE_LEGEND - 2)
                 all_users = sorted(ep_data["users"].unique())
                 ax.set_xticks(all_users)
 
-        # Hide empty subplots if lengths differ
-        # E.g. if 721 has 5 and 1155 has 3, rows=5. 
-        # Left col filled 0-4. Right col filled 0-2.
-        # Need to hide axes[3,1] and axes[4,1].
         if len(erc721_eps) < num_rows:
             for r in range(len(erc721_eps), num_rows):
                 fig.delaxes(axes[r, 0])
@@ -257,10 +202,10 @@ def plot_read_routes(root_dir, output_dir):
             for r in range(len(erc1155_eps), num_rows):
                 fig.delaxes(axes[r, 1])
 
-        plt.suptitle(f"Routas de Leitura (Esquerda: ERC721, Direita: ERC1155)", fontsize=FONT_SIZE_TITLE, y=1.02)
+        plt.suptitle(f"Latência das Rotas de Leitura (Esquerda: ERC721, Direita: ERC1155)", fontsize=FONT_SIZE_TITLE, y=1.02)
         plt.tight_layout()
         
-        filename = "plot_read_routes_all.png"
+        filename = "plot_read_latency_all.png"
         filepath = os.path.join(output_dir, filename)
         plt.savefig(filepath, bbox_inches="tight")
         plt.close()

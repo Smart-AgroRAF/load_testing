@@ -22,10 +22,10 @@ def plot_tx_build_routes(root_dir, output_dir):
     # Check/Create output directory
     os.makedirs(output_dir, exist_ok=True)
     
-    # Calculate global max for Y-axis scaling
-    max_requests = df["total_requests"].max()
-    margin = max_requests * 0.1 if max_requests > 0 else 1
-    y_max_limit = max_requests + margin
+    # Calculate global max for Y-axis scaling (including error bars)
+    max_val = (df["total_requests"] + df["total_requests_std"].fillna(0)).max()
+    margin = max_val * 0.1 if max_val > 0 else 1
+    y_max_limit = max_val + margin
     y_min_limit = 0 - margin
     
     endpoints = sorted(df["endpoint"].unique())
@@ -69,7 +69,9 @@ def plot_tx_build_routes(root_dir, output_dir):
             label="Fail", color=metric_colors["Fail"], capsize=5, **steps_styles["Fail"]
         )
         
-        plt.title(f"Rotas de Escrita: {endpoint}", fontsize=FONT_SIZE_TITLE)
+        contract_name = subset["contract"].iloc[0].upper() if not subset.empty else ""
+        plt.suptitle(f"Rota de Escrita - {contract_name}", fontsize=FONT_SIZE_TITLE)
+        plt.title(endpoint, fontsize=FONT_SIZE_TITLE - 6)
         plt.xlabel("Quantidade de Usuários", fontsize=FONT_SIZE)
         plt.ylabel("Quantidade de Requisições", fontsize=FONT_SIZE)
         plt.ylim(y_min_limit, y_max_limit)
@@ -79,7 +81,7 @@ def plot_tx_build_routes(root_dir, output_dir):
         
         plt.grid(True, linestyle='--', alpha=0.7)
         plt.legend(fontsize=FONT_SIZE_LEGEND)
-        plt.tight_layout()
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
         
         filename = f"plot_tx_build_route_{safe_name}.png"
         filepath = os.path.join(output_dir, filename)

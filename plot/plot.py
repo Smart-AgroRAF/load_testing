@@ -1,4 +1,3 @@
-
 import logging
 
 # Internal imports
@@ -13,6 +12,9 @@ from plot.plot_rps_comparison import plot_rps_comparison
 from plot.plot_success_fail import plot_success_fail
 from plot.plot_read_routes import plot_read_routes
 from plot.plot_tx_build_routes import plot_tx_build_routes
+from plot.plot_read_latency import plot_read_latency
+from plot.plot_tx_build_latency import plot_tx_build_latency
+# from plot.plot_all_routes import plot_all_routes_quantity, plot_all_routes_latency
 
 def generate_plots(root_dir):
     """
@@ -57,6 +59,18 @@ def generate_plots(root_dir):
 
     # 7. Write Routes Plot (Tx-Build)
     plot_tx_build_routes(root_dir, root_dir)
+
+    # 8. Read Routes Latency Plot
+    plot_read_latency(root_dir, root_dir)
+
+    # 9. Write Routes Latency Plot (Tx-Build)
+    plot_tx_build_latency(root_dir, root_dir)
+
+    # # 10. Summary All Routes Quantity
+    # plot_all_routes_quantity(root_dir, root_dir)
+
+    # # 11. Summary All Routes Latency
+    # plot_all_routes_latency(root_dir, root_dir)
 
     logging.info(f"Plots genareted success in: {root_dir}")
 

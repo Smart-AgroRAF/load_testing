@@ -36,6 +36,11 @@ def plot_success_fail(root_dir, output_dir):
         "Fail": {"linestyle": ":", "marker": "x"}
     }
     
+    # Calculate global max for Y-axis scaling (including error bars)
+    max_val = (df["total_requests"] + df.get("total_requests_std", 0).fillna(0)).max()
+    margin = max_val * 0.1 if max_val > 0 else 1
+    y_max_limit = max_val + margin
+
     for phase in phases:
         subset = df[df["phase"] == phase]
         
@@ -87,9 +92,14 @@ def plot_success_fail(root_dir, output_dir):
                 **styles["Fail"]
             )
 
-        plt.title(f"Quantidade de Requisições ({phase})", fontsize=FONT_SIZE_TITLE)
+        if phase == "api-tx-build":
+            op = "Escrita"
+        elif phase == "api-read-only":
+            op = "Leitura"
+        plt.title(f"Quantidade de Requisições ({op})", fontsize=FONT_SIZE_TITLE)
         plt.xlabel("Quantidade de Usuários", fontsize=FONT_SIZE)
         plt.ylabel("Quantidade de Requisições", fontsize=FONT_SIZE)
+        plt.ylim(0 - margin, y_max_limit)
         plt.xticks(all_users)
         plt.grid(True, linestyle='--', alpha=0.7)
         plt.legend(fontsize=FONT_SIZE_LEGEND)
