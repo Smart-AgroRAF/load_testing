@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Internal imports
-from plot.common import FIG_SIZE, FONT_SIZE, FONT_SIZE_LEGEND, FONT_SIZE_TITLE, styles, log_plot_creation
+from plot.common import FIG_SIZE, FONT_SIZE, FONT_SIZE_LEGEND, FONT_SIZE_TITLE, styles, log_plot_creation, save_plot
 
 def plot_latency(df, output_dir):
     """
@@ -49,7 +49,6 @@ def plot_latency(df, output_dir):
     plt.legend(fontsize=FONT_SIZE_LEGEND)
     plt.grid(True)
     plt.tight_layout()
-    filename = os.path.join(output_dir, "plot_latency.png")
-    plt.savefig(filename, bbox_inches='tight')
+    
+    save_plot(output_dir, "plot_latency", bbox_inches='tight')
     plt.close()
-    log_plot_creation(filename)

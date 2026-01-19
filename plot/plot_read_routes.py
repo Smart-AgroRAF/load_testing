@@ -2,7 +2,7 @@ import os
 import math
 import matplotlib.pyplot as plt
 import logging
-from plot.common import log_plot_creation, FIG_SIZE, FONT_SIZE, FONT_SIZE_TITLE, FONT_SIZE_LEGEND, scan_stats_endpoint_files
+from plot.common import log_plot_creation, FIG_SIZE, FONT_SIZE, FONT_SIZE_TITLE, FONT_SIZE_LEGEND, scan_stats_endpoint_files, save_plot
 
 def plot_read_routes(root_dir, output_dir):
     """
@@ -80,12 +80,8 @@ def plot_read_routes(root_dir, output_dir):
         plt.legend(fontsize=FONT_SIZE_LEGEND)
         plt.tight_layout(rect=[0, 0, 1, 0.95])
         
-        filename = f"plot_read_route_{safe_name}.png"
-        filepath = os.path.join(output_dir, filename)
-        plt.savefig(filepath)
+        save_plot(output_dir, f"plot_read_route_{safe_name}")
         plt.close()
-        
-        log_plot_creation(filepath)
 
     # ---------------------------------------------------------
     # 2. Generate CONSOLIDATED plots per contract
@@ -162,12 +158,8 @@ def plot_read_routes(root_dir, output_dir):
         plt.suptitle(f"Rotas de Leitura - {contract.upper()}", fontsize=FONT_SIZE_TITLE, y=1.02)
         plt.tight_layout()
         
-        filename = f"plot_read_routes_{contract}_all.png"
-        filepath = os.path.join(output_dir, filename)
-        plt.savefig(filepath, bbox_inches="tight")
+        save_plot(output_dir, f"plot_read_routes_{contract}_all", bbox_inches="tight")
         plt.close()
-        
-        log_plot_creation(filepath)
 
     # ---------------------------------------------------------
     # 3. Generate CONSOLIDATED plot for ALL endpoints (Combined)
@@ -246,9 +238,6 @@ def plot_read_routes(root_dir, output_dir):
                 ax.set_xticks(all_users)
 
         # Hide empty subplots if lengths differ
-        # E.g. if 721 has 5 and 1155 has 3, rows=5. 
-        # Left col filled 0-4. Right col filled 0-2.
-        # Need to hide axes[3,1] and axes[4,1].
         if len(erc721_eps) < num_rows:
             for r in range(len(erc721_eps), num_rows):
                 fig.delaxes(axes[r, 0])
@@ -260,9 +249,5 @@ def plot_read_routes(root_dir, output_dir):
         plt.suptitle(f"Routas de Leitura (Esquerda: ERC721, Direita: ERC1155)", fontsize=FONT_SIZE_TITLE, y=1.02)
         plt.tight_layout()
         
-        filename = "plot_read_routes_all.png"
-        filepath = os.path.join(output_dir, filename)
-        plt.savefig(filepath, bbox_inches="tight")
+        save_plot(output_dir, "plot_read_routes_all", bbox_inches="tight")
         plt.close()
-        
-        log_plot_creation(filepath)

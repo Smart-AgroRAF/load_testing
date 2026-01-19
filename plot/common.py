@@ -243,6 +243,24 @@ def log_plot_creation(filepath):
     """
     logging.info(f"\t- Generated plot: {filepath}")
 
+def save_plot(output_dir, filename_base, **kwargs):
+    """
+    Save the current figure in both PNG and PDF formats in separate subdirectories.
+    
+    Args:
+        output_dir: The base 'plots' directory.
+        filename_base: The filename without extension.
+        **kwargs: Additional arguments for plt.savefig (e.g., bbox_inches, dpi).
+    """
+    formats = ["png", "pdf"]
+    for fmt in formats:
+        subdir = os.path.join(output_dir, fmt)
+        os.makedirs(subdir, exist_ok=True)
+        
+        filepath = os.path.join(subdir, f"{filename_base}.{fmt}")
+        plt.savefig(filepath, **kwargs)
+        log_plot_creation(filepath)
+
 def scan_endpoint_stats(root_dir, phase_filter="api-read-only"):
     """
     Scans for out*.csv files and aggregates statistics per endpoint for experiments matching phase_filter.
