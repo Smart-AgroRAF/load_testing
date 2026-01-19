@@ -7,7 +7,7 @@ import numpy as np
 from matplotlib.patches import Patch
 
 # Internal imports
-from .common import FIG_SIZE, FONT_SIZE, FONT_SIZE_LEGEND, FONT_SIZE_TITLE, convert_users_to_int, log_plot_creation
+from .common import FIG_SIZE, FONT_SIZE, FONT_SIZE_LEGEND, FONT_SIZE_TITLE, convert_users_to_int, log_plot_creation, save_plot
 
 def create_txbuild_grouped_plot(root_dir, output_dir, use_log_scale=False):
     """
@@ -189,10 +189,9 @@ def create_txbuild_grouped_plot(root_dir, output_dir, use_log_scale=False):
     plt.tight_layout()
     # Save
     if use_log_scale:
-        filename = os.path.join(output_dir, "plot_txbuild_grouped_log.png")
+        filename_base = "plot_txbuild_grouped_log"
     else:
-        filename = os.path.join(output_dir, "plot_txbuild_grouped.png")
+        filename_base = "plot_txbuild_grouped"
     
-    plt.savefig(filename, bbox_inches='tight', dpi=150)
+    save_plot(output_dir, filename_base, bbox_inches='tight', dpi=150)
     plt.close()
-    log_plot_creation(filename)

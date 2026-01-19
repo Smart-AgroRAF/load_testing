@@ -4,7 +4,7 @@ import logging
 import matplotlib.pyplot as plt
 
 # Internal imports
-from plot.common import FIG_SIZE, FONT_SIZE, FONT_SIZE_LEGEND, FONT_SIZE_TITLE, styles, log_plot_creation
+from plot.common import FIG_SIZE, FONT_SIZE, FONT_SIZE_LEGEND, FONT_SIZE_TITLE, styles, log_plot_creation, save_plot
 
 def plot_throughput(df, output_dir):
     """
@@ -50,7 +50,6 @@ def plot_throughput(df, output_dir):
     plt.xlim(min(all_users) - padding, max(all_users) + padding)
     plt.grid(True)
     plt.tight_layout()
-    filename = os.path.join(output_dir, "plot_throughput.png")
-    plt.savefig(filename, bbox_inches='tight')
+    
+    save_plot(output_dir, "plot_throughput", bbox_inches='tight')
     plt.close()
-    log_plot_creation(filename)

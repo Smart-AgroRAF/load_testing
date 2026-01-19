@@ -1,7 +1,7 @@
 import os
 import matplotlib.pyplot as plt
 import logging
-from .common import scan_global_stats, log_plot_creation, styles, FONT_SIZE, FONT_SIZE_LEGEND, FONT_SIZE_TITLE
+from .common import scan_global_stats, log_plot_creation, styles, FONT_SIZE, FONT_SIZE_LEGEND, FONT_SIZE_TITLE, save_plot
 
 def plot_rps_comparison(root_dir, output_dir):
     """
@@ -68,8 +68,5 @@ def plot_rps_comparison(root_dir, output_dir):
 
     plt.tight_layout()
     
-    filename = os.path.join(output_dir, "global_rps_comparison.png")
-    plt.savefig(filename)
+    save_plot(output_dir, "global_rps_comparison")
     plt.close()
-    
-    log_plot_creation(filename)

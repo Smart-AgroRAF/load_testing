@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import logging
-from plot.common import log_plot_creation, FIG_SIZE, FONT_SIZE, FONT_SIZE_TITLE, FONT_SIZE_LEGEND, tab20, scan_global_stats
+from plot.common import log_plot_creation, FIG_SIZE, FONT_SIZE, FONT_SIZE_TITLE, FONT_SIZE_LEGEND, tab20, scan_global_stats, save_plot
 
 
 def plot_success_fail(root_dir, output_dir):
@@ -105,9 +105,5 @@ def plot_success_fail(root_dir, output_dir):
         plt.legend(fontsize=FONT_SIZE_LEGEND)
         plt.tight_layout()
         
-        filename = f"plot_success_fail_{phase}.png"
-        filepath = os.path.join(output_dir, filename)
-        plt.savefig(filepath)
+        save_plot(output_dir, f"plot_success_fail_{phase}")
         plt.close()
-        
-        log_plot_creation(filepath)

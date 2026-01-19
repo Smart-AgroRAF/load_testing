@@ -3,7 +3,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
-from plot.common import log_plot_creation, FIG_SIZE, FONT_SIZE, FONT_SIZE_TITLE, FONT_SIZE_LEGEND, scan_stats_endpoint_files
+from plot.common import log_plot_creation, FIG_SIZE, FONT_SIZE, FONT_SIZE_TITLE, FONT_SIZE_LEGEND, scan_stats_endpoint_files, save_plot
 
 def plot_tx_build_routes(root_dir, output_dir):
     """
@@ -83,12 +83,8 @@ def plot_tx_build_routes(root_dir, output_dir):
         plt.legend(fontsize=FONT_SIZE_LEGEND)
         plt.tight_layout(rect=[0, 0, 1, 0.95])
         
-        filename = f"plot_tx_build_route_{safe_name}.png"
-        filepath = os.path.join(output_dir, filename)
-        plt.savefig(filepath)
+        save_plot(output_dir, f"plot_tx_build_route_{safe_name}")
         plt.close()
-        
-        log_plot_creation(filepath)
 
     # ---------------------------------------------------------
     # 2. Generate CONSOLIDATED plots per contract
@@ -156,12 +152,8 @@ def plot_tx_build_routes(root_dir, output_dir):
         plt.suptitle(f"Routas de Escrita - {contract.upper()}", fontsize=FONT_SIZE_TITLE, y=1.02)
         plt.tight_layout()
         
-        filename = f"plot_tx_build_routes_{contract}_all.png"
-        filepath = os.path.join(output_dir, filename)
-        plt.savefig(filepath, bbox_inches="tight")
+        save_plot(output_dir, f"plot_tx_build_routes_{contract}_all", bbox_inches="tight")
         plt.close()
-        
-        log_plot_creation(filepath)
 
     # ---------------------------------------------------------
     # 3. Generate CONSOLIDATED plot for ALL endpoints (Combined)
@@ -247,9 +239,5 @@ def plot_tx_build_routes(root_dir, output_dir):
         plt.suptitle(f"Routas de Escrita (Esquerda: ERC721, Direita: ERC1155)", fontsize=FONT_SIZE_TITLE, y=1.02)
         plt.tight_layout()
         
-        filename = "plot_tx_build_routes_all.png"
-        filepath = os.path.join(output_dir, filename)
-        plt.savefig(filepath, bbox_inches="tight")
+        save_plot(output_dir, "plot_tx_build_routes_all", bbox_inches="tight")
         plt.close()
-        
-        log_plot_creation(filepath)

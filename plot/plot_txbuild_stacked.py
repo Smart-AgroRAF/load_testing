@@ -7,7 +7,7 @@ import numpy as np
 from matplotlib.patches import Patch
 
 # Internal imports
-from .common import FIG_SIZE, FONT_SIZE, FONT_SIZE_LEGEND, FONT_SIZE_TITLE, convert_users_to_int, log_plot_creation
+from .common import FIG_SIZE, FONT_SIZE, FONT_SIZE_LEGEND, FONT_SIZE_TITLE, convert_users_to_int, log_plot_creation, save_plot
 
 def create_txbuild_stacked_plot(root_dir, output_dir):
     """
@@ -192,7 +192,6 @@ def create_txbuild_stacked_plot(root_dir, output_dir):
     
     plt.xlim(-0.5, len(all_users) - 0.5 + bar_width*1.5)
     plt.tight_layout()
-    filename = os.path.join(output_dir, "plot_txbuild_stacked.png")
-    plt.savefig(filename, bbox_inches='tight', dpi=150)
+    
+    save_plot(output_dir, "plot_txbuild_stacked", bbox_inches='tight', dpi=150)
     plt.close()
-    log_plot_creation(filename)
