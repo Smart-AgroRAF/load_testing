@@ -14,7 +14,7 @@ import log
 from wallet.admin import fund_wallet, fund_wallets_batch
 from users.user import User
 from config import TIMEOUT_BLOCKCHAIN, AMOUNT_ETH
-from wallet.config import w3
+from wallet.config import get_w3, check_connection
 from stats import Stats
 
 class LoadTester:
@@ -22,7 +22,6 @@ class LoadTester:
 
     def __init__(
         self, 
-        # output_file,
         host, 
         mode, 
         contract,
@@ -98,6 +97,7 @@ class LoadTester:
         # For now, listing addresses is enough.
         for user in self.users:
             try:
+                w3 = get_w3()
                 balance_wei = w3.eth.get_balance(user.wallet.address)
                 balance_eth = w3.from_wei(balance_wei, "ether")
                 logging.info(

@@ -7,7 +7,7 @@ from eth_account import Account
 from eth_account.signers.local import LocalAccount
 
 # Internal imports
-from wallet.config import async_w3
+from wallet.config import get_async_w3
 
 class Wallet:
     """Represents an Ethereum wallet associated with a user (Async)."""
@@ -26,6 +26,7 @@ class Wallet:
     async def get_balance(self) -> float:
         """Return the wallet balance in ETH."""
         try:
+            async_w3 = get_async_w3()
             balance_wei = await async_w3.eth.get_balance(self.address)
             balance_eth = float(async_w3.from_wei(balance_wei, "ether"))
             
@@ -56,6 +57,7 @@ class Wallet:
 
     async def send_transaction(self, signed_tx, request_id, wait_receipt: bool = True):
         """Send a signed transaction to the network (Async)."""
+        async_w3 = get_async_w3()
         for attempt in range(3):
             try:
                 # Send raw transaction
@@ -112,6 +114,7 @@ class Wallet:
         """Build a transaction ready for signing (Async)."""
         try:
             gas_price_gwei = "50"
+            async_w3 = get_async_w3()
 
             # Async calls
             nonce = await async_w3.eth.get_transaction_count(self.address)

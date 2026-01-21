@@ -9,7 +9,7 @@ from web3 import Web3
 
 # Internal imports
 from config import PRIVATE_KEY, CONTRACT_ADDRESS, ABI_PATH
-from wallet.config import w3
+from wallet.config import get_w3
 from log import SIZE
 
 # --- Locks e singletons ---
@@ -34,19 +34,19 @@ def get_admin_account():
 
 
 def _get_chain_id():
-    return w3.eth.chain_id
+    return get_w3().eth.chain_id
 
 
 def _get_gas_price_wei(gwei: int) -> int:
     try:
-        return w3.to_wei(gwei, "gwei")
+        return get_w3().to_wei(gwei, "gwei")
     except Exception:
-        return w3.eth.gas_price
+        return get_w3().eth.gas_price
 
 
 def _get_nonce_rpc(address: str) -> int:
     """Sempre pegar nonce REAL do RPC (pending)."""
-    return w3.eth.get_transaction_count(address, "pending")
+    return get_w3().eth.get_transaction_count(address, "pending")
 
 
 # -------------------------------------
@@ -63,6 +63,7 @@ def send_transaction(
     wait_receipt=True
 ):
     try:
+        w3 = get_w3()
         tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
 
         # logging.info(f"Transaction sent")
@@ -130,14 +131,15 @@ def fund_wallet(
         try:
             with _admin_tx_lock:
 
-                # ---------- NEW: nonce real ----------
+                # nonce real
                 nonce = _get_nonce_rpc(admin.address)
 
                 gas_price = _get_gas_price_wei(gas_price_gwei)
                 gas_limit = 21000
+                w3 = get_w3()
                 value_wei = w3.to_wei(amount_eth, "ether")
 
-                # ---------- NEW: check balance BEFORE ----------
+                # check balance before
                 balance = w3.eth.get_balance(admin.address)
                 total_cost = value_wei + gas_limit * gas_price
 
@@ -172,7 +174,6 @@ def fund_wallet(
                     wait_receipt=wait_receipt
                 )
 
-            # success?
             if receipt and receipt.status == 1:
                 return True
 
@@ -222,6 +223,7 @@ def fund_wallets_batch(
                 
                 gas_price = _get_gas_price_wei(gas_price_gwei)
                 gas_limit = 21000
+                w3 = get_w3()
                 value_wei = w3.to_wei(amount_eth, "ether")
                 
                 # Check admin balance
@@ -318,7 +320,7 @@ def fund_wallets_batch(
 # Contract loading
 # -------------------------------------
 def get_contract(contract_address: str, abi):
-    return w3.eth.contract(address=contract_address, abi=abi)
+    return get_w3().eth.contract(address=contract_address, abi=abi)
 
 
 def load_contract():
@@ -346,7 +348,8 @@ def authorize_wallet(contract, wallet_address):
 
         with _admin_tx_lock:
             nonce = _get_nonce_rpc(admin_account.address)
-
+            w3 = get_w3()
+            
             tx = contract.functions.setAllowedAddress(wallet_address, True).build_transaction({
                 "from": admin_account.address,
                 "value": 0,
