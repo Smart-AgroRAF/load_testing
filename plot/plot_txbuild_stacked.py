@@ -179,10 +179,15 @@ def create_txbuild_stacked_plot(root_dir, output_dir):
         Patch(facecolor='#ff9800', edgecolor='white', label='ERC721')
     ]
 
-    # Combined Legend Outside
-    combined_legend = operation_legend + [Patch(facecolor='white', alpha=0, label='')] + erc_legend
-    ax.legend(handles=combined_legend, fontsize=FONT_SIZE_LEGEND, 
-              loc='upper left', bbox_to_anchor=(1.02, 1), borderaxespad=0.)
+    # Legend 1: Operations
+    legend1 = ax.legend(handles=operation_legend, fontsize=FONT_SIZE_LEGEND, 
+                        loc='upper left', bbox_to_anchor=(1.02, 1), borderaxespad=0.)
+    ax.add_artist(legend1)
+
+    # Legend 2: Contracts - Positioned below Legend 1
+    # We estimate position or use bbox_to_anchor with a lower y value
+    ax.legend(handles=erc_legend, fontsize=FONT_SIZE_LEGEND, 
+              loc='upper left', bbox_to_anchor=(1.02, 0.7), borderaxespad=0.)
     
     ax.grid(True, axis='y', alpha=0.3)
     

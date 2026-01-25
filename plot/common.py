@@ -95,17 +95,34 @@ def scan_results(root_dir):
                         continue
                     
                     # stats_task.csv has columns: task, count, mean, median, std, min, max, p50, p60, etc.
-                    # We need to aggregate across all tasks for this experiment
+                    
+                    # Filter for 'TX-BLOCK' if this is a write experiment (api-tx-build)
+                    # to avoid summing up API + BUILD + SIGN + SEND + BLOCK counts.
+                    if exp_type == "api-tx-build":
+                        # User requested "SEND" (meaning the confirmed write on blockchain). 
+                        # TX-BLOCK represents the confirmed block receipt.
+                        df = df[df["task"] == "TX-BLOCK"]
+
+                    if df.empty:
+                        continue
+                    
+                    # We need to aggregate across all tasks (now filtered) for this experiment
                     # Calculate weighted mean and total count
-                    total_count = df['count'].sum()
+                    
+                    # If we simply want "Success Count" for the plot, we should ideally use 'success_count' 
+                    # column if it exists, otherwise 'count'.
+                    # For plot_latency, we want the mean duration.
+                    
+                    count_col = 'success_count' if 'success_count' in df.columns else 'count'
+                    
+                    total_count = df[count_col].sum() if count_col in df.columns else df['count'].sum()
+                    
                     if total_count > 0:
-                        weighted_mean = (df['mean'] * df['count']).sum() / total_count
+                        weighted_mean = (df['mean'] * df['count']).sum() / df['count'].sum() # Weight by total occurrences
                         
                         # Incorporate both internal noise (std) and between-run noise (mean_std)
-                        # Variance = Mean of variances + Variance of means
-                        # We approximate this by summing squares of both types of noise
-                        internal_var = (df['std']**2 * df['count']).sum() / total_count
-                        between_run_var = (df.get('mean_std', 0)**2 * df['count']).sum() / total_count
+                        internal_var = (df['std']**2 * df['count']).sum() / df['count'].sum()
+                        between_run_var = (df.get('mean_std', 0)**2 * df['count']).sum() / df['count'].sum()
                         weighted_std = np.sqrt(internal_var + between_run_var)
                     else:
                         weighted_mean = 0
@@ -155,9 +172,40 @@ def scan_results_throughput(root_dir, window_size=10):
                     if df.empty:
                         continue
                     
-                    # stats_global.csv has 'rps' column and may have multiple rows (phases)
-                    # We need to aggregate by taking the mean RPS across all phases
-                    total_rps = df['rps'].sum() if 'rps' in df.columns else 0
+                    # stats_global.csv has 'rps' column which might be (API_RPS + BC_RPS).
+                    # For api-tx-build, we only want BC_RPS (Throughput of confirmed transactions).
+                    
+                    row = df.iloc[0] # Usually only one row per global stats file? Or multiple for phases?
+                    # scan_global_stats handles multi-row. Here we need to check.
+                    # Usually stats_global.csv from save.py has 1 row/repetition, but Consolidate logic might keep multiple?
+                    # Consolidate logic overwrites stats_global.csv (Line 274 in save.py creates stats_global).
+                    # But if we have multiple repetitions, we might have multiple stats_global in subfolders?
+                    # 'scan_results_throughput' iterates recursively.
+                    
+                    # For api-tx-build, calculate RPS = bc_success / duration
+                    if exp_type == "api-tx-build":
+                        bc_success = df.get('bc_success', df.get('total_bc', 0)).sum() # Sum if multiple rows/phases?
+                        duration = df['duration'].sum() 
+                        # Averaging RPS is tricky if duration varies.
+                        # Best is Total Success / Total Duration if we aggregate?
+                        # But here we are processing ONE stats_global.csv file (one repetition/experiment).
+                        
+                        total_rps = 0
+                        for _, r in df.iterrows():
+                             dur = r.get('duration', 1)
+                             succ = r.get('bc_success', 0)
+                             if dur > 0:
+                                 total_rps += succ / dur
+                                 
+                        # If df has multiple rows (e.g. phases), we sum? usually only 1 row of interest.
+                        if len(df) > 1:
+                            # average or sum? If phases are sequential, avg RPS? 
+                            # But usually we only have 1 phase per folder.
+                            pass
+                            
+                    else:
+                        # For read-only, rps is correct (api_rps)
+                        total_rps = df['rps'].sum()
                     
                     data.append({
                         'erc': erc_type,
@@ -217,9 +265,24 @@ def scan_global_stats(root_dir):
                     api_fail = row.get("api_fail", 0)
                     bc_fail = row.get("bc_fail", 0)
                     rps = row.get("rps", 0.0)
-                    
-                    total_success = api_success + bc_success
-                    total_fail = api_fail + bc_fail
+                    if phase == "api-tx-build":
+                        # For write experiments, we ONLY count blockchain transactions (SEND/BLOCK)
+                        total_requests = row.get("total_bc", 0)
+                        total_success = row.get("bc_success", 0)
+                        total_fail = row.get("bc_fail", 0)
+                        
+                        # Recalculate RPS based on BC success
+                        duration = row.get("duration", 1)
+                        if duration > 0:
+                            rps = total_success / duration
+                        else:
+                            rps = 0
+                    else:
+                        # For read-only
+                        total_requests = row.get("total_requests", 0) # total_api
+                        total_success = row.get("api_success", 0) + row.get("bc_success", 0)
+                        total_fail = row.get("api_fail", 0) + row.get("bc_fail", 0)
+                        rps = row.get("rps", 0.0)
                     
                     data.append({
                         "contract": contract,
