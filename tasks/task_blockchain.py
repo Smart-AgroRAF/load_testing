@@ -100,6 +100,7 @@ class TaskBlockchain:
             f" {f'[TX-SEND]':<15}"
             f" {endpoint:<31}"
             f" {duration:<1.3f}s"
+            f" {status.capitalize()}"
         )
         
         if not receipt:
