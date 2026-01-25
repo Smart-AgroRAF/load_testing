@@ -56,8 +56,8 @@ def plot_rps_comparison(root_dir, output_dir):
         return
 
     plt.xlabel("Quantidade de Usuários", fontsize=FONT_SIZE)
-    plt.ylabel("Global RPS", fontsize=FONT_SIZE)
-    plt.title("RPS Comparison by User Load", fontsize=FONT_SIZE_TITLE)
+    plt.ylabel("RPS Global", fontsize=FONT_SIZE)
+    plt.title("Comparação de RPS por Carga de Usuário", fontsize=FONT_SIZE_TITLE)
     plt.legend(fontsize=FONT_SIZE_LEGEND)
     plt.grid(True, linestyle='--', alpha=0.7)
     

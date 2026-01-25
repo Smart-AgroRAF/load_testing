@@ -26,6 +26,34 @@ styles = {
 
 # --- Helper Functions ---
 
+def format_endpoint_name(endpoint_str):
+    """
+    Formats the endpoint string to 'CONTRACT - Function'.
+    Example: /api/erc721/mintRootBatchTx -> ERC-721 - mintRootBatchTx
+    """
+    if not endpoint_str:
+        return ""
+    
+    parts = endpoint_str.strip("/").split("/")
+    
+    contract = ""
+    function_name = parts[-1] if parts else ""
+    
+    # Try to find contract in parts
+    for part in parts:
+        if "erc721" in part.lower():
+            contract = "ERC-721"
+            break
+        elif "erc1155" in part.lower():
+            contract = "ERC-1155"
+            break
+            
+    if contract:
+        return f"{contract} - {function_name}"
+    
+    return function_name
+
+
 def convert_users_to_int(val):
     """Convert users value to integer, handling lists/tuples."""
     try:
