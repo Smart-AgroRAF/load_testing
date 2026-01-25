@@ -76,7 +76,7 @@ def plot_success_fail(root_dir, output_dir):
             plt.errorbar(
                 users, contract_data["total_success"], 
                 yerr=contract_data.get("total_success_std"),
-                label=f"{contract} - Success", 
+                label=f"{contract} - Sucesso", 
                 color=colors.get(contract, "black"),
                 capsize=3,
                 **styles["Success"]
@@ -86,7 +86,7 @@ def plot_success_fail(root_dir, output_dir):
             plt.errorbar(
                 users, contract_data["total_fail"], 
                 yerr=contract_data.get("total_fail_std"),
-                label=f"{contract} - Fail", 
+                label=f"{contract} - Falha", 
                 color=colors.get(contract, "black"),
                 capsize=3,
                 **styles["Fail"]

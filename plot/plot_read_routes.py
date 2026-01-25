@@ -2,7 +2,7 @@ import os
 import math
 import matplotlib.pyplot as plt
 import logging
-from plot.common import log_plot_creation, FIG_SIZE, FONT_SIZE, FONT_SIZE_TITLE, FONT_SIZE_LEGEND, scan_stats_endpoint_files, save_plot
+from plot.common import log_plot_creation, FIG_SIZE, FONT_SIZE, FONT_SIZE_TITLE, FONT_SIZE_LEGEND, scan_stats_endpoint_files, save_plot, format_endpoint_name
 
 def plot_read_routes(root_dir, output_dir):
     """
@@ -59,16 +59,16 @@ def plot_read_routes(root_dir, output_dir):
         )
         plt.errorbar(
             subset["users"], subset["total_success"], yerr=subset["total_success_std"],
-            label="Success", color=metric_colors["Success"], capsize=5, **steps_styles["Success"]
+            label="Sucesso", color=metric_colors["Success"], capsize=5, **steps_styles["Success"]
         )
         plt.errorbar(
             subset["users"], subset["total_fail"], yerr=subset["total_fail_std"],
-            label="Fail", color=metric_colors["Fail"], capsize=5, **steps_styles["Fail"]
+            label="Falha", color=metric_colors["Fail"], capsize=5, **steps_styles["Fail"]
         )
         
         contract_name = subset["contract"].iloc[0].upper() if not subset.empty else ""
         plt.suptitle(f"Rota de Leitura - {contract_name}", fontsize=FONT_SIZE_TITLE)
-        plt.title(endpoint, fontsize=FONT_SIZE_TITLE - 6)
+        plt.title(format_endpoint_name(endpoint), fontsize=FONT_SIZE_TITLE - 6)
         plt.xlabel("Quantidade de Usuários", fontsize=FONT_SIZE)
         plt.ylabel("Quantidade de Requisições", fontsize=FONT_SIZE)
         plt.ylim(y_min_limit, y_max_limit)
@@ -138,10 +138,10 @@ def plot_read_routes(root_dir, output_dir):
                 continue
                 
             ax.errorbar(ep_data["users"], ep_data["total_requests"], yerr=ep_data["total_requests_std"], label="Total", capsize=3, **subplot_styles["Total"])
-            ax.errorbar(ep_data["users"], ep_data["total_success"], yerr=ep_data["total_success_std"], label="Success", capsize=3, **subplot_styles["Success"])
-            ax.errorbar(ep_data["users"], ep_data["total_fail"], yerr=ep_data["total_fail_std"], label="Fail", capsize=3, **subplot_styles["Fail"])
+            ax.errorbar(ep_data["users"], ep_data["total_success"], yerr=ep_data["total_success_std"], label="Sucesso", capsize=3, **subplot_styles["Success"])
+            ax.errorbar(ep_data["users"], ep_data["total_fail"], yerr=ep_data["total_fail_std"], label="Falha", capsize=3, **subplot_styles["Fail"])
             
-            ax.set_title(endpoint, fontsize=FONT_SIZE_TITLE - 4)
+            ax.set_title(format_endpoint_name(endpoint), fontsize=FONT_SIZE_TITLE - 4)
             ax.set_xlabel("Quantidade de Usuários", fontsize=FONT_SIZE - 2)
             ax.set_ylabel("Quantidade de Requisições", fontsize=FONT_SIZE - 2)
             ax.set_ylim(y_min_limit, y_max_limit)
@@ -204,10 +204,10 @@ def plot_read_routes(root_dir, output_dir):
             
             if not ep_data.empty:
                 ax.errorbar(ep_data["users"], ep_data["total_requests"], yerr=ep_data["total_requests_std"], label="Total", capsize=3, **subplot_styles["Total"])
-                ax.errorbar(ep_data["users"], ep_data["total_success"], yerr=ep_data["total_success_std"], label="Success", capsize=3, **subplot_styles["Success"])
-                ax.errorbar(ep_data["users"], ep_data["total_fail"], yerr=ep_data["total_fail_std"], label="Fail", capsize=3, **subplot_styles["Fail"])
+                ax.errorbar(ep_data["users"], ep_data["total_success"], yerr=ep_data["total_success_std"], label="Sucesso", capsize=3, **subplot_styles["Success"])
+                ax.errorbar(ep_data["users"], ep_data["total_fail"], yerr=ep_data["total_fail_std"], label="Falha", capsize=3, **subplot_styles["Fail"])
                 
-                ax.set_title(endpoint, fontsize=FONT_SIZE_TITLE - 4)
+                ax.set_title(format_endpoint_name(endpoint), fontsize=FONT_SIZE_TITLE - 4)
                 ax.set_xlabel("Quantidade de Usuários", fontsize=FONT_SIZE - 2)
                 ax.set_ylabel("Quantidade de Requisições", fontsize=FONT_SIZE - 2)
                 ax.set_ylim(y_min_limit, y_max_limit)
@@ -224,10 +224,10 @@ def plot_read_routes(root_dir, output_dir):
             
             if not ep_data.empty:
                 ax.errorbar(ep_data["users"], ep_data["total_requests"], yerr=ep_data["total_requests_std"], label="Total", capsize=3, **subplot_styles["Total"])
-                ax.errorbar(ep_data["users"], ep_data["total_success"], yerr=ep_data["total_success_std"], label="Success", capsize=3, **subplot_styles["Success"])
-                ax.errorbar(ep_data["users"], ep_data["total_fail"], yerr=ep_data["total_fail_std"], label="Fail", capsize=3, **subplot_styles["Fail"])
+                ax.errorbar(ep_data["users"], ep_data["total_success"], yerr=ep_data["total_success_std"], label="Sucesso", capsize=3, **subplot_styles["Success"])
+                ax.errorbar(ep_data["users"], ep_data["total_fail"], yerr=ep_data["total_fail_std"], label="Falha", capsize=3, **subplot_styles["Fail"])
                 
-                ax.set_title(endpoint, fontsize=FONT_SIZE_TITLE - 4)
+                ax.set_title(format_endpoint_name(endpoint), fontsize=FONT_SIZE_TITLE - 4)
                 ax.set_xlabel("Quantidade de Usuários", fontsize=FONT_SIZE - 2)
                 ax.set_ylabel("Quantidade de Requisições", fontsize=FONT_SIZE - 2)
                 ax.set_ylim(y_min_limit, y_max_limit)
@@ -246,7 +246,7 @@ def plot_read_routes(root_dir, output_dir):
             for r in range(len(erc1155_eps), num_rows):
                 fig.delaxes(axes[r, 1])
 
-        plt.suptitle(f"Routas de Leitura (Esquerda: ERC721, Direita: ERC1155)", fontsize=FONT_SIZE_TITLE, y=1.02)
+        plt.suptitle(f"Rotas de Leitura (Esquerda: ERC721, Direita: ERC1155)", fontsize=FONT_SIZE_TITLE, y=1.02)
         plt.tight_layout()
         
         save_plot(output_dir, "plot_read_routes_all", bbox_inches="tight")

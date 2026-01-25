@@ -2,7 +2,7 @@ import os
 import math
 import matplotlib.pyplot as plt
 import logging
-from plot.common import log_plot_creation, FIG_SIZE, FONT_SIZE, FONT_SIZE_TITLE, FONT_SIZE_LEGEND, scan_stats_endpoint_files, save_plot
+from plot.common import log_plot_creation, FIG_SIZE, FONT_SIZE, FONT_SIZE_TITLE, FONT_SIZE_LEGEND, scan_stats_endpoint_files, save_plot, format_endpoint_name
 
 def plot_read_latency(root_dir, output_dir):
     """
@@ -50,7 +50,7 @@ def plot_read_latency(root_dir, output_dir):
         
         contract_name = subset["contract"].iloc[0].upper() if not subset.empty else ""
         plt.suptitle(f"Rota de Leitura - {contract_name}", fontsize=FONT_SIZE_TITLE)
-        plt.title(endpoint, fontsize=FONT_SIZE_TITLE - 6)
+        plt.title(format_endpoint_name(endpoint), fontsize=FONT_SIZE_TITLE - 6)
         plt.xlabel("Quantidade de Usuários", fontsize=FONT_SIZE)
         plt.ylabel("Latência (s)", fontsize=FONT_SIZE)
         plt.ylim(y_min_limit, y_max_limit)
@@ -107,7 +107,7 @@ def plot_read_latency(root_dir, output_dir):
                 
             ax.errorbar(ep_data["users"], ep_data["mean_duration"], yerr=ep_data["duration_std"], label="Latência Média", capsize=3, **style)
             
-            ax.set_title(endpoint, fontsize=FONT_SIZE_TITLE - 4)
+            ax.set_title(format_endpoint_name(endpoint), fontsize=FONT_SIZE_TITLE - 4)
             ax.set_xlabel("Quantidade de Usuários", fontsize=FONT_SIZE - 2)
             ax.set_ylabel("Latência (s)", fontsize=FONT_SIZE - 2)
             ax.set_ylim(y_min_limit, y_max_limit)
@@ -161,7 +161,7 @@ def plot_read_latency(root_dir, output_dir):
             
             if not ep_data.empty:
                 ax.errorbar(ep_data["users"], ep_data["mean_duration"], yerr=ep_data["duration_std"], label="Latência Média", capsize=3, **style)
-                ax.set_title(endpoint, fontsize=FONT_SIZE_TITLE - 4)
+                ax.set_title(format_endpoint_name(endpoint), fontsize=FONT_SIZE_TITLE - 4)
                 ax.set_xlabel("Quantidade de Usuários", fontsize=FONT_SIZE - 2)
                 ax.set_ylabel("Latência (s)", fontsize=FONT_SIZE - 2)
                 ax.set_ylim(y_min_limit, y_max_limit)
@@ -177,7 +177,7 @@ def plot_read_latency(root_dir, output_dir):
             
             if not ep_data.empty:
                 ax.errorbar(ep_data["users"], ep_data["mean_duration"], yerr=ep_data["duration_std"], label="Latência Média", capsize=3, **style)
-                ax.set_title(endpoint, fontsize=FONT_SIZE_TITLE - 4)
+                ax.set_title(format_endpoint_name(endpoint), fontsize=FONT_SIZE_TITLE - 4)
                 ax.set_xlabel("Quantidade de Usuários", fontsize=FONT_SIZE - 2)
                 ax.set_ylabel("Latência (s)", fontsize=FONT_SIZE - 2)
                 ax.set_ylim(y_min_limit, y_max_limit)
