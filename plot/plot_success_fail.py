@@ -29,6 +29,12 @@ def plot_success_fail(root_dir, output_dir):
         "erc1155": tab20[0]  # Blue
     }
     
+    # Contract label mapping for standardized display
+    contract_labels = {
+        "erc721": "ERC-721",
+        "erc1155": "ERC-1155"
+    }
+    
     # Line styles for metrics
     styles = {
         "Total": {"linestyle": "-", "marker": "o"},
@@ -61,12 +67,13 @@ def plot_success_fail(root_dir, output_dir):
                 continue
                 
             users = contract_data["users"]
+            contract_label = contract_labels.get(contract, contract.upper())
             
             # Plot Total
             plt.errorbar(
                 users, contract_data["total_requests"], 
                 yerr=contract_data.get("total_requests_std"),
-                label=f"{contract} - Total", 
+                label=f"{contract_label} - Total", 
                 color=colors.get(contract, "black"),
                 capsize=3,
                 **styles["Total"]
@@ -76,7 +83,7 @@ def plot_success_fail(root_dir, output_dir):
             plt.errorbar(
                 users, contract_data["total_success"], 
                 yerr=contract_data.get("total_success_std"),
-                label=f"{contract} - Sucesso", 
+                label=f"{contract_label} - Sucesso", 
                 color=colors.get(contract, "black"),
                 capsize=3,
                 **styles["Success"]
@@ -86,7 +93,7 @@ def plot_success_fail(root_dir, output_dir):
             plt.errorbar(
                 users, contract_data["total_fail"], 
                 yerr=contract_data.get("total_fail_std"),
-                label=f"{contract} - Falha", 
+                label=f"{contract_label} - Falha", 
                 color=colors.get(contract, "black"),
                 capsize=3,
                 **styles["Fail"]

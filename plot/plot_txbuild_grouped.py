@@ -181,8 +181,8 @@ def create_txbuild_grouped_plot(root_dir, output_dir, use_log_scale=False):
     
     # Legend 2: Contracts
     erc_legend = [
-        Patch(facecolor='#4caf50', edgecolor='white', label='ERC1155'),
-        Patch(facecolor='#ff9800', edgecolor='white', label='ERC721')
+        Patch(facecolor='#4caf50', edgecolor='white', label='ERC-1155'),
+        Patch(facecolor='#ff9800', edgecolor='white', label='ERC-721')
     ]
     ax.legend(handles=erc_legend, fontsize=FONT_SIZE_LEGEND, loc='upper left', bbox_to_anchor=(1.02, 0.7))
     
