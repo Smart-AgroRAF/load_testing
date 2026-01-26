@@ -8,6 +8,7 @@ from eth_account.signers.local import LocalAccount
 
 # Internal imports
 from wallet.config import get_async_w3
+from config import TIMEOUT_BLOCKCHAIN
 
 class Wallet:
     """Represents an Ethereum wallet associated with a user (Async)."""
@@ -58,56 +59,46 @@ class Wallet:
     async def send_transaction(self, signed_tx, request_id, wait_receipt: bool = True):
         """Send a signed transaction to the network (Async)."""
         async_w3 = get_async_w3()
-        for attempt in range(3):
-            try:
-                # Send raw transaction
-                tx_hash_bytes = await async_w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-                tx_hash = tx_hash_bytes # hex() is called later usually
+        
+        try:
+            # Send raw transaction
+            tx_hash_bytes = await async_w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+            tx_hash = tx_hash_bytes # hex() is called later usually
 
-                if wait_receipt:
-                    # Wait for receipt
-                    receipt = await async_w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
-                    status_str = "Success" if receipt.status == 1 else "Failed"
-                    
-                    if receipt.status == 0:
-                        # Try to get revert reason (call trace)
-                        try:
-                            tx = await async_w3.eth.get_transaction(tx_hash)
-                            await async_w3.eth.call({
-                                "to": tx["to"],
-                                "from": tx["from"],
-                                "data": tx["input"],
-                                "value": tx["value"],
-                            }, receipt.blockNumber - 1)
-                        except Exception as e:
-                            logging.error(
-                                f"[User-{self.user_id:03d}]" 
-                                f"  [Req-{request_id:03d}]"
-                                f"  [wallet:{self.address}]"
-                                f"  Revert reason: {e}"
-                            )
-                    
-                    return tx_hash, receipt
+            if wait_receipt:
+                # Wait for receipt
+                receipt = await async_w3.eth.wait_for_transaction_receipt(tx_hash, timeout=TIMEOUT_BLOCKCHAIN)
+                
+                if receipt.status == 0:
+                    # Try to get revert reason (call trace)
+                    try:
+                        tx = await async_w3.eth.get_transaction(tx_hash)
+                        await async_w3.eth.call({
+                            "to": tx["to"],
+                            "from": tx["from"],
+                            "data": tx["input"],
+                            "value": tx["value"],
+                        }, receipt.blockNumber - 1)
+                    except Exception as e:
+                        logging.error(
+                            f"[User-{self.user_id:03d}]" 
+                            f"  [Req-{request_id:03d}]"
+                            f"  [wallet:{self.address}]"
+                            f"  Revert reason: {e}"
+                        )
+                
+                return tx_hash, receipt
 
-                return tx_hash, None
+            return tx_hash, None
 
-            except Exception as e:
-                logging.warning(
-                    f"[User-{self.user_id:03d}]"
-                    f" [Req-{request_id:03d}]" 
-                    f" [wallet:{self.address}]"
-                    f" Retry {attempt+1}/3 send failed: {e}"
-                )
-
-                await asyncio.sleep(1)
-
-        logging.error(
-            f"[User-{self.user_id:03d}]"
-            f"  [Req-{request_id:03d}]"
-            f"  [wallet:{self.address}]"
-            f"  Transaction failed after retries"
-        )
-        return None, None
+        except Exception as e:
+            logging.error(
+                f"[User-{self.user_id:03d}]"
+                f" [Req-{request_id:03d}]" 
+                f" [wallet:{self.address}]"
+                f" Send failed: {e}"
+            )
+            return None, None
 
 
     async def build_transaction(self, tx_obj: dict) -> dict:
@@ -122,10 +113,11 @@ class Wallet:
             # Helper for gas price
             try:
                 gas_price = await async_w3.eth.gas_price
-                # Override if we want fixed
-                # gas_price = int(async_w3.to_wei(gas_price_gwei, "gwei"))
             except:
                 gas_price = await async_w3.eth.gas_price
+            
+            # Increase gas price by 10% to prevent stuck transactions
+            gas_price = int(gas_price * 1.1)
 
             value_wei = int(async_w3.to_wei(0.0, "ether"))
             chain_id = await async_w3.eth.chain_id

@@ -224,18 +224,23 @@ class User:
         self.blockchain_requests_counter += 1
 
         # Await execution
-        result, tx_hash, status = await self.task_blockchain.execute(
-            tx_obj=tx_obj,
-            endpoint=endpoint,
-            request_id=self.blockchain_requests_counter
-        )
+        try:
+            result, tx_hash, status = await self.task_blockchain.execute(
+                tx_obj=tx_obj,
+                endpoint=endpoint,
+                request_id=self.blockchain_requests_counter
+            )
 
-        if status == "success":
-            self.bc_success += 1
-        else:
+            if status == "success":
+                self.bc_success += 1
+            else:
+                self.bc_fail += 1
+                
+            return result, tx_hash, status
+
+        except Exception as e:
             self.bc_fail += 1
-            
-        return result, tx_hash, status
+            raise e
 
 
     # RANDOM MODE (READ-ONLY)
