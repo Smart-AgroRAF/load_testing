@@ -17,10 +17,10 @@ tab20 = plt.get_cmap("tab20").colors
 
 # Define styles from plot_experiments.py
 styles = {
-    ("erc1155", "api-tx-build"): {"color": tab20[1], "label": "ERC1155 - Escrita (Produtor)", "marker": "o"}, # Light Blue
-    ("erc721", "api-tx-build"): {"color": tab20[0], "label": "ERC721 - Escrita (Produtor)", "marker": "^"},  # Dark Blue
-    ("erc1155", "api-read-only"): {"color": tab20[7], "label": "ERC1155 - Leitura (Consumidor)", "marker": "o"}, # Light Red
-    ("erc721", "api-read-only"): {"color": tab20[6], "label": "ERC721 - Leitura (Consumidor)", "marker": "^"},  # Dark Red
+    ("erc1155", "api-tx-build"): {"color": tab20[1], "label": "ERC-1155 - Escrita (Produtor)", "marker": "o"}, # Light Blue
+    ("erc721", "api-tx-build"): {"color": tab20[0], "label": "ERC-721 - Escrita (Produtor)", "marker": "^"},  # Dark Blue
+    ("erc1155", "api-read-only"): {"color": tab20[7], "label": "ERC-1155 - Leitura (Consumidor)", "marker": "o"}, # Light Red
+    ("erc721", "api-read-only"): {"color": tab20[6], "label": "ERC-721 - Leitura (Consumidor)", "marker": "^"},  # Dark Red
 }
 
 

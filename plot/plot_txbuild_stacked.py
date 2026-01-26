@@ -175,8 +175,8 @@ def create_txbuild_stacked_plot(root_dir, output_dir):
     ]
     
     erc_legend = [
-        Patch(facecolor='#4caf50', edgecolor='white', label='ERC1155'),
-        Patch(facecolor='#ff9800', edgecolor='white', label='ERC721')
+        Patch(facecolor='#4caf50', edgecolor='white', label='ERC-1155'),
+        Patch(facecolor='#ff9800', edgecolor='white', label='ERC-721')
     ]
 
     # Legend 1: Operations

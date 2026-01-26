@@ -121,7 +121,7 @@ def plot_read_latency(root_dir, output_dir):
         for j in range(i + 1, len(axes)):
             fig.delaxes(axes[j])
 
-        plt.suptitle(f"Latência das Rotas de Leitura - {contract.upper()}", fontsize=FONT_SIZE_TITLE, y=1.02)
+        plt.suptitle(f"Latência das Rotas de Leitura - {contract.upper().replace('ERC', 'ERC-')}", fontsize=FONT_SIZE_TITLE, y=1.02)
         plt.tight_layout()
         
         save_plot(output_dir, f"plot_read_latency_{contract}_all", bbox_inches="tight")
@@ -194,7 +194,7 @@ def plot_read_latency(root_dir, output_dir):
             for r in range(len(erc1155_eps), num_rows):
                 fig.delaxes(axes[r, 1])
 
-        plt.suptitle(f"Latência das Rotas de Leitura (Esquerda: ERC721, Direita: ERC1155)", fontsize=FONT_SIZE_TITLE, y=1.02)
+        plt.suptitle(f"Latência das Rotas de Leitura (Esquerda: ERC-721, Direita: ERC-1155)", fontsize=FONT_SIZE_TITLE, y=1.02)
         plt.tight_layout()
         
         save_plot(output_dir, "plot_read_latency_all", bbox_inches="tight")
