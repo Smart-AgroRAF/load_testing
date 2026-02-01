@@ -187,7 +187,7 @@ def fund_wallet(
 
 
 # -------------------------------------
-# FUND WALLETS BATCH - NEW
+# FUND WALLETS BATCH 
 # -------------------------------------
 def fund_wallets_batch(
     recipients: list,  # List of (user_id, address) tuples
