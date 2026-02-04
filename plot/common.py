@@ -6,9 +6,9 @@ import numpy as np
 import logging
 
 # Constants from plot_experiments.py
-FIG_SIZE = (9, 8)
-FONT_SIZE = 18
-FONT_SIZE_LEGEND = 15
+FIG_SIZE = (12, 8)
+FONT_SIZE = 32
+FONT_SIZE_LEGEND = 28
 FONT_SIZE_TITLE = 22
 X_LIMIT = 100 
 
