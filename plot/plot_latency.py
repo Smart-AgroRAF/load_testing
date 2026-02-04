@@ -33,17 +33,19 @@ def plot_latency(df, output_dir):
             label=style["label"], color=style["color"], marker=style["marker"], capsize=5
         )
         
-    plt.title("Impacto do Número de Usuários na Latência", fontsize=FONT_SIZE_TITLE)
+    # plt.title("Impacto do Número de Usuários na Latência", fontsize=FONT_SIZE_TITLE)
     plt.xlabel("Quantidade de Usuários")
-    plt.ylabel("Latência (s) das Requisições Atendidas com Sucesso")
+    plt.ylabel("Latência (s) das Requisições Atendidas")
     plt.xticks(all_users)
+    plt.ylim(-0.2, 9)
+    plt.yticks(range(0, 9, 1))
     
     # Calculate balanced padding
     if len(all_users) > 1:
         spread = max(all_users) - min(all_users)
-        padding = spread * 0.1 # 10% of the range
+        padding = spread * 0.02
     else:
-        padding = max(all_users) * 0.1
+        padding = max(all_users) * 0.02
 
     plt.xlim(min(all_users) - padding, max(all_users) + padding)
     plt.legend(fontsize=FONT_SIZE_LEGEND)

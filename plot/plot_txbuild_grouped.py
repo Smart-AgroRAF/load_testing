@@ -113,14 +113,15 @@ def create_txbuild_grouped_plot(root_dir, output_dir, use_log_scale=False):
     all_users = sorted(df['users'].unique())
     task_order = ['API-TX-BUILD', 'QUEUE', 'TX-BUILD', 'TX-SIGN', 'TX-SEND']
     
-    plt.rcParams.update({'font.size': FONT_SIZE})
+    # plt.rcParams.update({'font.size': FONT_SIZE})
+    plt.rcParams.update({'font.size': 18})
     fig, ax = plt.subplots(figsize=(12, 8))
     
     n_contracts = 2
     n_tasks = len(task_order)
     
     # Dimensions
-    bar_width = 0.08
+    bar_width = 0.09
     gap_at_center = 0.0
     group_width = n_tasks * bar_width
     
@@ -158,15 +159,24 @@ def create_txbuild_grouped_plot(root_dir, output_dir, use_log_scale=False):
     ax.set_ylabel('Latência (s)')
     
     if use_log_scale:
-        ax.set_title('Detalhamento de Latência por Etapa (Escala Logarítmica)', fontsize=FONT_SIZE_TITLE)
+        # ax.set_title('Detalhamento de Latência por Etapa (Escala Logarítmica)', fontsize=FONT_SIZE_TITLE)
         ax.set_yscale('log')
         ax.grid(True, axis='y', which="both", alpha=0.3)
     else:
-        ax.set_title('Detalhamento de Latência por Etapa', fontsize=FONT_SIZE_TITLE)
+        # ax.set_title('Detalhamento de Latência por Etapa', fontsize=FONT_SIZE_TITLE)
         ax.grid(True, axis='y', alpha=0.3)
     
     ax.set_xticks(x)
     ax.set_xticklabels(all_users)
+    
+    # Calculate balanced padding for x-axis
+    # if len(all_users) > 1:
+    spread = max(x) - min(x)
+    padding = spread * 0.2
+    # else:
+    #     padding = 0.5
+    
+    ax.set_xlim(min(x) - padding, max(x) + padding)
     
     # Legend 1: Operations
     op_legend = [
@@ -176,7 +186,8 @@ def create_txbuild_grouped_plot(root_dir, output_dir, use_log_scale=False):
         Patch(facecolor='#636363', edgecolor='black', label='SIGN'),
         Patch(facecolor='#252525', edgecolor='black', label='SEND'),
     ]
-    legend1 = ax.legend(handles=op_legend, fontsize=FONT_SIZE_LEGEND, loc='upper left', bbox_to_anchor=(1.02, 1))
+    # legend1 = ax.legend(handles=op_legend, fontsize=FONT_SIZE_LEGEND, loc='upper left', bbox_to_anchor=(1.02, 1))
+    legend1 = ax.legend(handles=op_legend, fontsize=15, loc='upper left', bbox_to_anchor=(1.02, 1))
     ax.add_artist(legend1)
     
     # Legend 2: Contracts
@@ -184,7 +195,8 @@ def create_txbuild_grouped_plot(root_dir, output_dir, use_log_scale=False):
         Patch(facecolor='#4caf50', edgecolor='white', label='ERC-1155'),
         Patch(facecolor='#ff9800', edgecolor='white', label='ERC-721')
     ]
-    ax.legend(handles=erc_legend, fontsize=FONT_SIZE_LEGEND, loc='upper left', bbox_to_anchor=(1.02, 0.7))
+    # ax.legend(handles=erc_legend, fontsize=FONT_SIZE_LEGEND, loc='upper left', bbox_to_anchor=(1.02, 0.7))
+    ax.legend(handles=erc_legend, fontsize=15, loc='upper left', bbox_to_anchor=(1.02, 0.7))
     
     plt.tight_layout()
     # Save

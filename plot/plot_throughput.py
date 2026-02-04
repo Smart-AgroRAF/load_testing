@@ -34,18 +34,21 @@ def plot_throughput(df, output_dir):
             label=style["label"], color=style["color"], marker=style["marker"], capsize=5
         )
         
-    plt.title("Impacto do Número de Usuários na Vazão", fontsize=FONT_SIZE_TITLE)
+    # plt.title("Impacto do Número de Usuários na Vazão", fontsize=FONT_SIZE_TITLE)
     plt.xlabel("Quantidade de Usuários")
-    plt.ylabel("Vazão (req/s) de Requisições Atendidas com Sucesso")
+    plt.ylabel("Vazão (req/s) de Requisições Atendidas")
     plt.xticks(all_users)
     plt.legend(fontsize=FONT_SIZE_LEGEND)
     
+    plt.ylim(-20, 1000)
+    plt.yticks(range(0, 1000, 100))
+
     # Calculate balanced padding
     if len(all_users) > 1:
         spread = max(all_users) - min(all_users)
-        padding = spread * 0.1
+        padding = spread * 0.02
     else:
-        padding = max(all_users) * 0.1
+        padding = max(all_users) * 0.02
         
     plt.xlim(min(all_users) - padding, max(all_users) + padding)
     plt.grid(True)
