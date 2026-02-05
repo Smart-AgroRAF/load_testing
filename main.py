@@ -267,13 +267,39 @@ def main():
     # If --plot is provided, only generate plots and exit
     if args.plot:
         if not os.path.exists(args.plot):
-            logging.info(f"Error: Directory '{args.plot}' not found.")
+            print(f"Error: Directory '{args.plot}' not found.")
             return
         
         try:
+            # First, reconsolidate statistics from existing out_rep-*.csv files
+            print("=" * 80)
+            print("Reconsolidating statistics from existing test results...")
+            print("")
+            
+            # Walk through the results directory to find all test run directories
+            for root, dirs, files in os.walk(args.plot):
+                # Check if this directory contains args_run.json (indicates a test run directory)
+                if "args_run.json" in files:
+                    # Check for api-tx-build and api-read-only subdirectories
+                    for phase in ["api-tx-build", "api-read-only"]:
+                        phase_dir = os.path.join(root, phase)
+                        if os.path.isdir(phase_dir):
+                            # Check if there are out_rep-*.csv files
+                            out_files = [f for f in os.listdir(phase_dir) 
+                                       if f.startswith("out") and f.endswith(".csv")]
+                            if out_files:
+                                print(f"Consolidating {phase} in {root}")
+                                save.consolidate_stats(root, phase)
+            
+            print("")
+            print("Statistics reconsolidation complete.")
+            print("=" * 80)
+            print("")
+            
+            # Now generate plots
             generate_plots(args.plot)
         except Exception as e:
-            logging.info(f"Error generated plots: {e}")
+            print(f"Error generated plots: {e}")
             import traceback
             traceback.print_exc()
         return
