@@ -169,13 +169,9 @@ def create_txbuild_grouped_plot(root_dir, output_dir, use_log_scale=False):
     ax.set_xticks(x)
     ax.set_xticklabels(all_users)
     
-    # Calculate balanced padding for x-axis
-    # if len(all_users) > 1:
-    spread = max(x) - min(x)
-    padding = spread * 0.2
-    # else:
-    #     padding = 0.5
-    
+    # Fixed padding for x-axis to be the same regardless of tick count
+    # 0.6 covers the bar cluster width (0.45 per side) with a consistent margin
+    padding = 0.6    
     ax.set_xlim(min(x) - padding, max(x) + padding)
     
     # Legend 1: Operations

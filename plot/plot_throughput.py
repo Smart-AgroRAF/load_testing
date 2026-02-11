@@ -36,7 +36,7 @@ def plot_throughput(df, output_dir):
         
     # plt.title("Impacto do Número de Usuários na Vazão", fontsize=FONT_SIZE_TITLE)
     plt.xlabel("Quantidade de Usuários")
-    plt.ylabel("Vazão (req/s) de Requisições Atendidas")
+    plt.ylabel("Vazão (req/s)")
     plt.xticks(all_users)
     plt.legend(fontsize=FONT_SIZE_LEGEND)
     

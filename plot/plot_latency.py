@@ -35,7 +35,7 @@ def plot_latency(df, output_dir):
         
     # plt.title("Impacto do Número de Usuários na Latência", fontsize=FONT_SIZE_TITLE)
     plt.xlabel("Quantidade de Usuários")
-    plt.ylabel("Latência (s) das Requisições Atendidas")
+    plt.ylabel("Latência (s)")
     plt.xticks(all_users)
     plt.ylim(-0.2, 9)
     plt.yticks(range(0, 9, 1))

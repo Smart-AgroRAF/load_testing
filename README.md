@@ -2,7 +2,7 @@
 
 Este repositório contém uma ferramenta de teste de carga personalizada para avaliar o desempenho da plataforma SmartAgroRAF, focando em interações com Blockchain (Besu) e API.
 
-## 📂 Estrutura do Projeto
+## Estrutura do Projeto
 
 O projeto é modularizado para separar a orquestração, definição de comportamento de usuário, execução de baixo nível e análise de dados.
 
@@ -17,7 +17,7 @@ O projeto é modularizado para separar a orquestração, definição de comporta
 
 *   **`load_tester.py`**:  
     O coração da execução. A classe `LoadTester`:
-    *   Gerencia o pool de threads (`ThreadPoolExecutor`) para simular usuários concorrentes.
+    *   Gerencia tarefas assíncronas (`asyncio`) e requisições HTTP (`aiohttp`) para simular usuários concorrentes de forma eficiente.
     *   Controla os modos de teste: **Static** (carga constante) e **Ramp-up** (aumento gradual de usuários).
     *   Coleta os resultados brutos de cada "usuário".
 
@@ -29,7 +29,7 @@ O projeto é modularizado para separar a orquestração, definição de comporta
 
 *   **`tasks/`**:  
     Camada de execução de baixo nível.
-    *   `TaskAPI`: Realiza chamadas HTTP para a API.
+    *   `TaskAPI`: Realiza chamadas HTTP assíncronas de alta performance utilizando `aiohttp`.
     *   `TaskBlockchain`: Constrói, assina e envia transações para a rede blockchain usando `web3.py`.
 
 *   **`save.py`**:  
@@ -60,7 +60,7 @@ O projeto é modularizado para separar a orquestração, definição de comporta
 *   **`config.py`**:  
     Variáveis de ambiente, URLs da API/RPC e configurações globais.
 
-## ⚙️ Pré-requisitos e Configuração
+## Pré-requisitos e Configuração
 
 ### Ambiente Virtual Python (venv)
 
@@ -94,7 +94,7 @@ deactivate
 
 > **Nota**: Sempre ative o ambiente virtual antes de executar os testes ou scripts de plotagem.
 
-## 🚀 Como Executar
+## Como Executar
 
 O script é executado via linha de comando. Exemplo básico:
 
@@ -102,7 +102,7 @@ O script é executado via linha de comando. Exemplo básico:
 python3 main.py --users 10 --duration 60 --run static --contract erc721
 ```
 
-## 📋 Parâmetros Disponíveis
+## Parâmetros Disponíveis
 
 ### Configuração Geral
 
@@ -125,7 +125,7 @@ python3 main.py --users 10 --duration 60 --run static --contract erc721
 
 | Parâmetro | Tipo | Padrão | Descrição |
 |-----------|------|--------|-----------|
-| `--duration` | float[] | [60.0] | Duração do teste em segundos (aceita múltiplos valores) |
+| `--duration` | float[] | [10.0] | Duração do teste em segundos (aceita múltiplos valores) |
 | `--users` | int[] | [10] | Número de usuários simultâneos (aceita múltiplos valores) |
 | `--step-users` | int[] | [1] | Número de usuários adicionados a cada incremento (modo ramp-up) |
 | `--interval-users` | float[] | [1.0] | Tempo entre incrementos de usuários em segundos (modo ramp-up) |
@@ -135,13 +135,13 @@ python3 main.py --users 10 --duration 60 --run static --contract erc721
 
 | Parâmetro | Tipo | Padrão | Descrição |
 |-----------|------|--------|-----------|
-| `--warmup-users` | int | 1 | Número de usuários no warm-up |
-| `--warmup-duration` | float | 0 | Duração do warm-up em segundos (0 = desabilitado) |
+| `--warmup-users` | int | 10 | Número de usuários no warm-up |
+| `--warmup-duration` | float | 10 | Duração do warm-up em segundos (0 = desabilitado) |
 | `--warmup-step-users` | int | 1 | Incremento de usuários no warm-up |
 | `--warmup-interval-users` | float | 1.0 | Tempo entre incrementos no warm-up (segundos) |
 | `--warmup-interval-requests` | float | 1.0 | Pausa entre requisições no warm-up (segundos) |
 
-## 🔄 Modos de Teste
+## Modos de Teste
 
 ### Static Load (Carga Estática)
 Mantém um número constante de usuários durante toda a duração do teste.
@@ -190,7 +190,7 @@ Executa 4 testes:
 - 50 usuários por 60s
 - 50 usuários por 120s
 
-## 🔥 Warm-up
+## Warm-up
 
 O warm-up é uma fase opcional que precede os testes principais, permitindo que o sistema "aqueça" antes das medições reais.
 
@@ -198,7 +198,7 @@ O warm-up é uma fase opcional que precede os testes principais, permitindo que 
 python3 main.py --warmup-duration 30 --warmup-users 5 --users 50 --duration 120
 ```
 
-## � Repetições de Teste
+## Repetições de Teste
 
 A ferramenta suporta execução de múltiplas repetições de cada configuração de teste para garantir resultados estatisticamente significativos.
 
@@ -219,7 +219,7 @@ python3 main.py --users 50 --duration 120 --repeat 3
 - **Intervalos de Confiança**: Permite calcular IC de 95% nos gráficos de latência
 - **Detecção de Anomalias**: Facilita identificação de comportamentos inconsistentes
 
-## �📊 Resultados (Outputs)
+## Resultados (Outputs)
 
 Os resultados são salvos automaticamente na pasta `results/<timestamp>/`.
 
@@ -349,7 +349,7 @@ A ferramenta gera automaticamente uma ampla variedade de gráficos para análise
    - Mostra como a vazão varia durante a execução do teste
    - Útil para identificar padrões de degradação ou estabilização
 
-## 📈 Gerando Gráficos de Resultados Existentes
+## Gerando Gráficos de Resultados Existentes
 
 Você pode gerar ou regenerar gráficos a partir de resultados já coletados sem executar novos testes:
 
@@ -373,7 +373,7 @@ Isso é útil para:
 - **Experimentar** diferentes formatos ou escalas de gráficos
 - **Corrigir** estatísticas sem precisar refazer os testes completos
 
-## 🎯 Exemplos de Uso
+## Exemplos de Uso
 
 ### Teste Rápido de Validação
 ```bash
@@ -416,7 +416,7 @@ python3 main.py --run ramp-up \
 python3 main.py --plot results/04-02-2026_15-30-00
 ```
 
-## 📝 Notas Importantes
+## Notas Importantes
 
 ### Arquitetura e Implementação
 
